@@ -130,10 +130,10 @@ rm ~/.config/opencode/skills/learning-assessment
 rm ~/.config/opencode/skills/learning-research
 ```
 
+Then optionally delete the repo and knowledge base directories.
+
 **Claude Code:**
 
 ```
 /plugin uninstall learning-agent@learning-agent
 ```
-
-Then optionally delete the repo and knowledge base directories.
