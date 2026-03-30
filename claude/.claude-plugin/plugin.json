@@ -9,7 +9,5 @@
   "homepage": "https://github.com/luqs1/learning-agent",
   "repository": "https://github.com/luqs1/learning-agent",
   "license": "MIT",
-  "keywords": ["learning", "education", "teaching", "pedagogy"],
-  "agents": "./agents/",
-  "skills": "./skills/"
+  "keywords": ["learning", "education", "teaching", "pedagogy"]
 }
