@@ -1,6 +1,7 @@
 ---
 name: learning-research
 description: Use when the Learning agent needs to gather verified knowledge on a topic before teaching it
+user-invocable: false
 ---
 
 # Learning Research

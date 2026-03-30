@@ -1,6 +1,7 @@
 ---
 name: learning-assessment
 description: Use when teaching any claim or concept in the Learning agent, before stating facts to the user
+user-invocable: false
 ---
 
 # Learning Assessment Gate
