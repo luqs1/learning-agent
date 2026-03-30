@@ -63,22 +63,12 @@ The teaching methodology is rooted in classical Islamic pedagogy:
 **Prerequisites:** [opencode](https://opencode.ai) installed and configured.
 
 ```bash
-# Clone the repo
-git clone https://github.com/luqs1/learning-agent.git ~/repos/learning-agent
-
-# Create directories if they don't exist
-mkdir -p ~/.config/opencode/agents
-mkdir -p ~/.config/opencode/skills
-
-# Symlink agent
-ln -s ~/repos/learning-agent/opencode/agents/learning.md ~/.config/opencode/agents/learning.md
-
-# Symlink skills
-ln -s ~/repos/learning-agent/opencode/skills/learning-assessment ~/.config/opencode/skills/learning-assessment
-ln -s ~/repos/learning-agent/opencode/skills/learning-research ~/.config/opencode/skills/learning-research
+opencode plugin learning-agent@git+https://github.com/luqs1/learning-agent.git -g
 ```
 
-Select the **learning** agent from the agent list to start a session.
+This installs the plugin globally and registers the learning agent and its sub-skills automatically. Restart opencode after installing.
+
+Select the **learning** agent from the agent list (Tab key) to start a session.
 
 Knowledge base is stored at `~/.config/opencode/learning/<topic-slug>/`.
 
@@ -124,13 +114,7 @@ Knowledge base is stored at `~/.claude/learning/<topic-slug>/`.
 
 **opencode:**
 
-```bash
-rm ~/.config/opencode/agents/learning.md
-rm ~/.config/opencode/skills/learning-assessment
-rm ~/.config/opencode/skills/learning-research
-```
-
-Then optionally delete the repo and knowledge base directories.
+Remove the plugin line from `~/.config/opencode/opencode.json` and restart opencode.
 
 **Claude Code:**
 
