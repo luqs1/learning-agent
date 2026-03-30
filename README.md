@@ -9,21 +9,47 @@ Every claim is verified against a persistent, citable knowledge base before it r
 The agent has three components:
 
 1. **learning agent** — the main system prompt defining pedagogy, tone, and session flow
-2. **learning-assessment** — a gate that checks whether a claim is backed by verified, cited research before stating it. Hidden from the user — invoked automatically by the agent.
-3. **learning-research** — a multi-angle research skill that fetches primary sources, extracts expert perspectives, and stores everything in a persistent knowledge base. Hidden from the user — invoked automatically by the agent.
+2. **learning-assessment** — a gate that checks whether a claim is backed by verified, cited research before stating it. Invoked automatically by the agent.
+3. **learning-research** — a multi-angle research skill that fetches primary sources, extracts expert perspectives, and stores everything in a persistent knowledge base. Invoked automatically by the agent.
 
-The flow:
+### Session flow
 
 ```
 Topic introduced
+  → Probe current understanding (question)
   → Assessment gate checks knowledge base
   → If gaps exist, research fills them (multi-angle: technical, expert perspective, contested areas)
   → Teach with citations [source: filename.md]
   → Comprehension check (question or problem)
-  → Repeat
+  → Correct/affirm, fill gaps
+  → Teach next concept
+  → ... repeat ...
+  → Periodic synthesis checkpoint
+  → Application exercise
+  → Challenge/counter-argument
+  → Final synthesis and consolidation
 ```
 
+### Research
+
+The agent never states a non-trivial fact without first verifying it against a persistent knowledge base. When it encounters a topic or concept it hasn't researched yet, it:
+
+1. **Searches** from three angles — technical accuracy, expert/practitioner perspective, and contested or uncertain areas
+2. **Fetches and reads** primary sources (official docs, papers, practitioner blog posts — not summaries)
+3. **Stores** the research as structured markdown files, one per concept, with citations
+4. **Cites** every claim with `[source: filename.md]`
+
 Research persists across sessions. If you come back to a topic later, the agent reads what it already has and only researches what's new.
+
+### Pedagogy
+
+The teaching methodology is rooted in classical Islamic pedagogy:
+
+- **Tadarruj** — graduated difficulty. Never advance until the current concept is verified. Ibn Khaldun warned: advancing before mastery causes the student to lose everything.
+- **Malaka** — embodied mastery through practice. Deep understanding forms through repeated retrieval, not passive reading.
+- **Jadal** — structured challenge. Steelman counter-positions to push from surface understanding to genuine depth.
+- **'Ilm + 'Amal** — knowledge and action are inseparable. Abstract understanding must be grounded in application.
+- **Prophetic method** — question before teaching. Surface the learner's current understanding before explaining anything.
 
 ## Supported tools
 
@@ -52,13 +78,13 @@ ln -s ~/repos/learning-agent/opencode/skills/learning-assessment ~/.config/openc
 ln -s ~/repos/learning-agent/opencode/skills/learning-research ~/.config/opencode/skills/learning-research
 ```
 
-**Usage:** Open opencode and select the **learning** agent from the agent list. The agent takes over the entire session — every message goes through the learning prompt.
+Select the **learning** agent from the agent list to start a session.
 
-**Knowledge base:** `~/.config/opencode/learning/<topic-slug>/`
+Knowledge base is stored at `~/.config/opencode/learning/<topic-slug>/`.
 
-### Claude Code (plugin)
+### Claude Code
 
-The easiest way to install. Inside Claude Code, run:
+Inside Claude Code, run:
 
 ```
 /plugin marketplace add luqs1/learning-agent
@@ -71,15 +97,15 @@ To update when new versions are released:
 /plugin update learning-agent@learning-agent
 ```
 
-**Usage:** There are two ways to use it:
+There are two ways to use it:
 
-#### Full session (recommended)
+**Full session (recommended):**
 
 ```bash
 claude --agent learning-agent:learning
 ```
 
-Starts Claude Code with the learning agent as **the** agent for the entire session. Every message you send goes through the learning prompt. This is the full experience — probing questions, layered teaching, comprehension checks, the lot.
+The learning agent runs as the agent for the entire session. Every message goes through the learning prompt — probing questions, layered teaching, comprehension checks, the lot.
 
 You can add a shell alias to make this shorter:
 
@@ -88,65 +114,13 @@ You can add a shell alias to make this shorter:
 alias learn='claude --agent learning-agent:learning'
 ```
 
-Then just run `learn` to start a session.
+**Quick fork via slash command:**
 
-#### Quick fork via slash command
+Inside any Claude Code session, type `/learn <topic>`. This spins up the learning agent in a temporary forked context — good for "quick, teach me this thing" moments without leaving what you're doing.
 
-Inside any Claude Code session:
-
-```
-/learn <topic>
-```
-
-This spins up the learning agent in a **temporary forked context**. It teaches you the topic, then you're back to your normal session. Good for "quick, teach me this thing" moments without leaving what you're doing.
-
-**Knowledge base:** `~/.claude/learning/<topic-slug>/`
-
-### Claude Code (manual)
-
-If you prefer symlinks over the plugin system:
-
-```bash
-# Clone the repo
-git clone https://github.com/luqs1/learning-agent.git ~/repos/learning-agent
-
-# Create directories if they don't exist
-mkdir -p ~/.claude/agents
-mkdir -p ~/.claude/skills
-
-# Symlink agent
-ln -s ~/repos/learning-agent/claude/agents/learning ~/.claude/agents/learning
-
-# Symlink skills
-ln -s ~/repos/learning-agent/claude/skills/learn ~/.claude/skills/learn
-ln -s ~/repos/learning-agent/claude/skills/learning-assessment ~/.claude/skills/learning-assessment
-ln -s ~/repos/learning-agent/claude/skills/learning-research ~/.claude/skills/learning-research
-```
-
-With manual install, the agent is not namespaced:
-
-```bash
-claude --agent learning
-```
-
-**Knowledge base:** `~/.claude/learning/<topic-slug>/`
+Knowledge base is stored at `~/.claude/learning/<topic-slug>/`.
 
 ## Uninstall
-
-**Claude Code (plugin):**
-
-```
-/plugin uninstall learning-agent@learning-agent
-```
-
-**Claude Code (manual):**
-
-```bash
-rm ~/.claude/agents/learning
-rm ~/.claude/skills/learn
-rm ~/.claude/skills/learning-assessment
-rm ~/.claude/skills/learning-research
-```
 
 **opencode:**
 
@@ -154,6 +128,12 @@ rm ~/.claude/skills/learning-research
 rm ~/.config/opencode/agents/learning.md
 rm ~/.config/opencode/skills/learning-assessment
 rm ~/.config/opencode/skills/learning-research
+```
+
+**Claude Code:**
+
+```
+/plugin uninstall learning-agent@learning-agent
 ```
 
 Then optionally delete the repo and knowledge base directories.
