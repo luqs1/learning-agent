@@ -1,6 +1,6 @@
 {
   "name": "learning-agent",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A learning agent that teaches through questions, problems, and active recall — not lecturing.",
   "author": {
     "name": "luqs1",

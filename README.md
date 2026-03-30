@@ -71,6 +71,37 @@ To update when new versions are released:
 /plugin update learning-agent@learning-agent
 ```
 
+**Usage:** There are two ways to use it:
+
+#### Full session (recommended)
+
+```bash
+claude --agent learning-agent:learning
+```
+
+Starts Claude Code with the learning agent as **the** agent for the entire session. Every message you send goes through the learning prompt. This is the full experience — probing questions, layered teaching, comprehension checks, the lot.
+
+You can add a shell alias to make this shorter:
+
+```bash
+# Add to your .bashrc or .zshrc
+alias learn='claude --agent learning-agent:learning'
+```
+
+Then just run `learn` to start a session.
+
+#### Quick fork via slash command
+
+Inside any Claude Code session:
+
+```
+/learn <topic>
+```
+
+This spins up the learning agent in a **temporary forked context**. It teaches you the topic, then you're back to your normal session. Good for "quick, teach me this thing" moments without leaving what you're doing.
+
+**Knowledge base:** `~/.claude/learning/<topic-slug>/`
+
 ### Claude Code (manual)
 
 If you prefer symlinks over the plugin system:
@@ -92,25 +123,11 @@ ln -s ~/repos/learning-agent/claude/skills/learning-assessment ~/.claude/skills/
 ln -s ~/repos/learning-agent/claude/skills/learning-research ~/.claude/skills/learning-research
 ```
 
-**Usage:** There are two ways to use it:
-
-#### Full session (recommended)
+With manual install, the agent is not namespaced:
 
 ```bash
 claude --agent learning
 ```
-
-Starts Claude Code with the learning agent as **the** agent for the entire session. Every message you send goes through the learning prompt. This is the full experience — probing questions, layered teaching, comprehension checks, the lot.
-
-#### Quick fork via slash command
-
-Inside any Claude Code session:
-
-```
-/learn <topic>
-```
-
-This spins up the learning agent in a **temporary forked context**. It teaches you the topic, then you're back to your normal session. Good for "quick, teach me this thing" moments without leaving what you're doing.
 
 **Knowledge base:** `~/.claude/learning/<topic-slug>/`
 
