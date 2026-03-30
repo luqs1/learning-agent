@@ -56,9 +56,24 @@ ln -s ~/repos/learning-agent/opencode/skills/learning-research ~/.config/opencod
 
 **Knowledge base:** `~/.config/opencode/learning/<topic-slug>/`
 
-### Claude Code
+### Claude Code (plugin)
 
-**Prerequisites:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed.
+The easiest way to install. Inside Claude Code, run:
+
+```
+/plugin marketplace add luqs1/learning-agent
+/plugin install learning-agent@learning-agent
+```
+
+To update when new versions are released:
+
+```
+/plugin update learning-agent@learning-agent
+```
+
+### Claude Code (manual)
+
+If you prefer symlinks over the plugin system:
 
 ```bash
 # Clone the repo
@@ -101,19 +116,27 @@ This spins up the learning agent in a **temporary forked context**. It teaches y
 
 ## Uninstall
 
-Remove the symlinks:
+**Claude Code (plugin):**
+
+```
+/plugin uninstall learning-agent@learning-agent
+```
+
+**Claude Code (manual):**
 
 ```bash
-# opencode
-rm ~/.config/opencode/agents/learning.md
-rm ~/.config/opencode/skills/learning-assessment
-rm ~/.config/opencode/skills/learning-research
-
-# Claude Code
 rm ~/.claude/agents/learning
 rm ~/.claude/skills/learn
 rm ~/.claude/skills/learning-assessment
 rm ~/.claude/skills/learning-research
+```
+
+**opencode:**
+
+```bash
+rm ~/.config/opencode/agents/learning.md
+rm ~/.config/opencode/skills/learning-assessment
+rm ~/.config/opencode/skills/learning-research
 ```
 
 Then optionally delete the repo and knowledge base directories.

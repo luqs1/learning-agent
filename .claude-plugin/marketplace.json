@@ -1,0 +1,21 @@
+{
+  "name": "learning-agent",
+  "owner": {
+    "name": "luqs1",
+    "url": "https://github.com/luqs1"
+  },
+  "metadata": {
+    "description": "A learning agent that teaches through questions, problems, and active recall."
+  },
+  "plugins": [
+    {
+      "name": "learning-agent",
+      "source": "./claude",
+      "description": "A learning agent built on classical Islamic pedagogy. Teaches through questions, problems, and active recall — not lecturing.",
+      "version": "1.0.0",
+      "author": {
+        "name": "luqs1"
+      }
+    }
+  ]
+}

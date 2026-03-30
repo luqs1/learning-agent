@@ -1,0 +1,15 @@
+{
+  "name": "learning-agent",
+  "version": "1.0.0",
+  "description": "A learning agent that teaches through questions, problems, and active recall — not lecturing.",
+  "author": {
+    "name": "luqs1",
+    "url": "https://github.com/luqs1"
+  },
+  "homepage": "https://github.com/luqs1/learning-agent",
+  "repository": "https://github.com/luqs1/learning-agent",
+  "license": "MIT",
+  "keywords": ["learning", "education", "teaching", "pedagogy"],
+  "agents": "./agents/",
+  "skills": "./skills/"
+}
