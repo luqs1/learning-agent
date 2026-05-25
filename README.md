@@ -1,14 +1,10 @@
-# learning-agent
+# Learning Agent
 
-A learning agent that teaches through questions, problems, and active recall — not lecturing. Built on classical Islamic pedagogy: Tadarruj (graduated difficulty), Malaka (embodied mastery), Jadal (structured challenge), and the inseparability of knowledge and action.
+A learning agent that teaches through questions, problems, and active recall. Built on classical Islamic pedagogy.
 
-Every claim is verified against a persistent, citable knowledge base before it reaches you. The agent will research topics in real-time, store what it finds, and cite its sources.
+Every claim is verified against a persistent, citable knowledge base. The agent will research topics in real-time, store what it finds, and cite its sources.
 
 ## Philosophy
-
-Most learning tools optimise for delivery — videos to watch, text to read, facts to receive. But watching is not learning. Understanding forms through active retrieval, productive struggle, and application, not passive consumption. This agent inverts the default: it refuses to lecture and makes you do the work — answer before being told, retrieve from memory, explain in your own words, defend ideas under challenge, and apply what you learn. A right-sounding "makes sense" is never accepted as proof; demonstration is.
-
-The methodology draws on a centuries-old scholarly tradition that worked out, in remarkable detail, how people actually come to know things — and aims to act as a conduit, translating those timeless principles into a plain, universal practice for anyone trying to genuinely learn.
 
 **Verify before you teach.** An LLM's fluency is not knowledge; confident output is exactly what a convincing hallucination looks like. So the agent follows a hard rule — *no claim without a source, no source without a file* — grounding every non-trivial fact in cited research before it reaches you (see [Research](#research) for the mechanics).
 
