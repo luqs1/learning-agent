@@ -4,6 +4,27 @@ A learning agent that teaches through questions, problems, and active recall —
 
 Every claim is verified against a persistent, citable knowledge base before it reaches you. The agent will research topics in real-time, store what it finds, and cite its sources.
 
+## Philosophy
+
+Most learning tools optimise for delivery — videos to watch, text to read, facts to receive. But watching is not learning. Understanding forms through active retrieval, productive struggle, and application, not passive consumption. This agent inverts the default: it refuses to lecture and makes you do the work — answer before being told, retrieve from memory, explain in your own words, defend ideas under challenge, and apply what you learn. A right-sounding "makes sense" is never accepted as proof; demonstration is.
+
+The methodology draws on a centuries-old scholarly tradition that worked out, in remarkable detail, how people actually come to know things — and aims to act as a conduit, translating those timeless principles into a plain, universal practice for anyone trying to genuinely learn.
+
+**Verify before you teach.** An LLM's fluency is not knowledge; confident output is exactly what a convincing hallucination looks like. So the agent follows a hard rule — *no claim without a source, no source without a file* — grounding every non-trivial fact in cited research before it reaches you (see [Research](#research) for the mechanics).
+
+**The pillars:**
+
+- **Tadarruj** — graduated difficulty. Never advance until the current concept is verified. Ibn Khaldun warned: advancing before mastery causes the student to lose everything.
+- **Malaka** — embodied mastery through practice. Deep understanding forms through repeated retrieval, not passive reading.
+- **Prophetic method** — question before teaching. Surface the learner's current understanding before explaining anything.
+- **Jadal** — structured challenge. Steelman counter-positions to push from surface understanding to genuine depth.
+- **'Ilm + 'Amal** — knowledge and action are inseparable. Abstract understanding must be grounded in application.
+- **Tawadu** — honesty about the limits of knowledge. Where experts disagree, say so; where the agent is uncertain, it says so. Acknowledging the edge of what is known is a virtue, not a weakness.
+
+**Depth over breadth.** Better to truly understand three concepts than to skim ten — the agent prioritises mastery of fundamentals over coverage.
+
+**Teacher as companion, not lecturer.** The relationship is collegial — a knowledgeable companion in a study circle, not an authority at a podium. It respects you by challenging you rather than flattering you.
+
 ## How it works
 
 The agent has three components:
@@ -40,16 +61,6 @@ The agent never states a non-trivial fact without first verifying it against a p
 4. **Cites** every claim with `[source: filename.md]`
 
 Research persists across sessions. If you come back to a topic later, the agent reads what it already has and only researches what's new.
-
-### Pedagogy
-
-The teaching methodology is rooted in classical Islamic pedagogy:
-
-- **Tadarruj** — graduated difficulty. Never advance until the current concept is verified. Ibn Khaldun warned: advancing before mastery causes the student to lose everything.
-- **Malaka** — embodied mastery through practice. Deep understanding forms through repeated retrieval, not passive reading.
-- **Jadal** — structured challenge. Steelman counter-positions to push from surface understanding to genuine depth.
-- **'Ilm + 'Amal** — knowledge and action are inseparable. Abstract understanding must be grounded in application.
-- **Prophetic method** — question before teaching. Surface the learner's current understanding before explaining anything.
 
 ## Supported tools
 
