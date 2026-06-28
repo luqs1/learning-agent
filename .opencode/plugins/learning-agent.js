@@ -51,6 +51,11 @@ export const LearningAgentPlugin = async ({ client, directory }) => {
         config.skills.paths.push(skillsDir);
       }
 
+      // Auto-allow webfetch so the learning agent can research
+      // without permission prompts on every fetch.
+      config.permission = config.permission || {};
+      config.permission.webfetch = config.permission.webfetch || "allow";
+
       // Register the learning agent from the markdown file.
       if (fs.existsSync(agentFile)) {
         const raw = fs.readFileSync(agentFile, "utf8");
