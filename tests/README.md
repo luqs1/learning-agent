@@ -21,11 +21,13 @@ and a working login or `ANTHROPIC_API_KEY`.
 - **Frontmatter** - every agent/skill file has a valid block; skill `name`
   matches its folder; the opencode copies are flat `key: value` (the plugin
   loader cannot parse nested YAML); the Claude agent lists exactly the two
-  shared skills; the `learn` command forks into `agent: learning`.
+  shared skills; the `learn` and `research` commands fork into
+  `agent: learning`; the opencode plugin registers the `researcher` agent
+  (the learning prompt plus a mode preamble) and the `/research` command.
 - **Parity** - the `claude/` and `opencode/` trees are identical after
   normalising the knowledge-base path and the bundled-script prefix. Only
   these differences are allowed: the KB path, the agent frontmatter keys
-  (`name`/`skills` vs `mode`/`color`), the `learn` command (Claude only),
+  (`name`/`skills` vs `mode`/`color`), the `learn` and `research` commands (Claude only),
   `user-invocable: false` and `allowed-tools` (Claude skills only), and script
   paths (`${CLAUDE_SKILL_DIR}/scripts/x.sh` in Claude, `scripts/x.sh` in
   opencode). The test prints the first differing line. The
@@ -69,7 +71,12 @@ and a working login or `ANTHROPIC_API_KEY`.
   `LEARNING_KB_ROOT`; no line lets memory (`learner.md`, the profile) replace
   or skip the gauging question, and the agent prompt defines learner memory
   (paths, templates, update points), the pacing controls and the
-  one-concept-per-turn rule.
+  one-concept-per-turn rule; the agent prompt defines research mode (the
+  trigger cues, the founder gauging question reused verbatim and pinned as
+  never skipped, the flow with its `phase` names, the brief template with
+  its seven sections and the `Value | What | Date | Source file | Tier`
+  table, the Tier 1-2 rule, the "X says" rule, the paywall rule, the
+  brief file path and `brief.write`).
 - **Harness self-tests** - the YAML-subset parser, the frontmatter parser,
   the trace parser, every scenario fixture (it must load and validate), the
   driver's CLI arguments, and each deterministic assertion against a
@@ -103,7 +110,7 @@ own events to the same file.
 | event | emitted by | data |
 |---|---|---|
 | `session.start` | agent, once, first thing | `topic`, `slug` |
-| `phase` | agent, on every flow transition | `from`, `to` (`probe`, `research`, `merge`, `teach`, `check`, `recall`, `apply`, `challenge`, `synthesis`) |
+| `phase` | agent, on every flow transition | `from`, `to` (`probe`, `research`, `merge`, `teach`, `check`, `recall`, `apply`, `challenge`, `synthesis`; research mode: `gauge`, `plan`, `research`, `merge`, `brief`, `challenge`) |
 | `gate.check` | `learning-assessment`, every run | `concept`, `result` (`pass`/`fail`), `reason` |
 | `research.fanout` | `learning-research`, once per fresh concept, just before the three angles are launched in parallel (researcher subagents, or a multi-call fan-out) | `angles` (array), `parallel` (bool). The researchers then write their own `research.query` / `research.fetch` / `kb.write` into the same file; the parent emits `phase research -> merge` and `merge -> teach` around the merge |
 | `research.query` | `learning-research`, every search | `provider` (the script or tool actually called: `arxiv.sh`, `hn.sh`, `WebSearch`, `mcp__exa__web_search_exa`, ...), `query`, `material_type` (`docs`/`paper`/`blog`/`talk`/`dataset`/`news`/`other`) |
@@ -114,6 +121,7 @@ own events to the same file.
 | `check.verdict` | agent, on evaluating an answer | `concept`, `verdict` (`correct`/`partial`/`wrong`), `action` (`advance`/`correct`/`reteach`) |
 | `memory.read` | agent, at session open, once for `learner.md` and once for `<slug>/progress.md` | `file`, `found` (bool) |
 | `memory.write` | agent, after each synthesis checkpoint and at session end, per file updated | `file` |
+| `brief.write` | agent, research mode, every brief written to the topic folder | `file` (`brief-YYYY-MM-DD.md`) |
 | `session.end` | agent, at wrap-up | `concepts_covered` |
 
 Values are short strings (under 200 chars), double quotes only, no
@@ -151,7 +159,10 @@ reading); a session with `teach` events but no `check.ask` (lecturing); a
 (the profile stood in for the gauging question); a session with no
 `memory.write` before `session.end` (nothing remembered); a fresh topic with
 no `research.fanout`, or `research.query` events whose timestamps are spread
-seconds apart in a chain (one search per turn instead of a fan-out).
+seconds apart in a chain (one search per turn instead of a fan-out); in
+research mode, a `brief.write` with no earlier `phase` to `gauge` (the brief
+was built before the hypothesis was asked for), or a `phase` to `brief` with
+no `brief.write` (the brief was shown but not kept).
 
 ## 3. Scenario tests (`npm run test:scenarios`)
 
@@ -182,13 +193,16 @@ claude -p --plugin-dir ./claude --agent learning-agent:learning \
 
 with `LEARNING_KB_ROOT=<run-dir>/kb` in the environment. Both prompts honour
 that variable, and the harness note restates the resolved paths (topic folder,
-`learner.md`, `progress.md`, trace) and the topic slug, so runs never touch
-`~/.claude/learning`.
+`learner.md`, `progress.md`, trace, and in research mode the brief path) and
+the topic slug, so runs never touch `~/.claude/learning`. A `mode: research`
+fixture adds one line to the note saying the session was opened with
+`/research`, which is the signal the slash command gives; `claude -p` cannot
+fork a slash command itself.
 
 ### Running
 
 ```bash
-npm run test:scenarios                          # all fixtures (10 x ~4 turns; budget a few dollars each)
+npm run test:scenarios                          # all fixtures (12 x ~4 turns; budget a few dollars each)
 npm run test:scenarios -- --domain medicine     # one domain
 npm run test:scenarios -- --only hash-tables    # fixtures whose path contains the string
 npm run test:scenarios -- --dry-run             # validate fixtures, print the plan, no model calls
@@ -251,6 +265,8 @@ seed:                               # optional: files written under the KB root 
   hash-tables/progress.md: |
     # Progress: hash tables
     ...
+mode: research                      # optional: teach (default) | research; see "Research-mode fixtures"
+brief_paragraphs: 12                # optional: paragraph budget for the brief turn (research mode)
 # optional: model, judge_model, budget_usd, max_paragraphs
 ```
 
@@ -275,20 +291,44 @@ research files would let a scenario pass the gate with content the agent
 never verified. `profile_written` treats a seeded file as "written" only if
 its content changed during the run.
 
+#### Research-mode fixtures
+
+`mode: research` marks a scenario that exercises research mode (issue #9):
+the founder asks a research question ("who is doing X and how are they
+funded", "is there a real market for Y") and expects a cited brief, not a
+lesson. What the switch changes:
+
+- the harness note tells the agent the session was opened with `/research`;
+- `trace_written` expects a `brief.write` event instead of `teach`;
+- `max_paragraphs_without_question` gives the **brief turn** (a turn that
+  carries a Numbers or Findings section plus a Contested / Unknown section)
+  the `brief_paragraphs` budget (default 12) instead of `n`, and additionally
+  requires that turn to end with a question. Every other turn keeps the
+  normal budget. The rule text in the prompt is untouched: the brief is the
+  one turn it exempts, and only in this mode.
+
+The opening turn is still a question (`probe_first` applies unchanged) and
+the second learner turn answers it by stating the hypothesis and the evidence
+in hand, so write it that way. The `expect: correction` turn should ask the
+agent to break one of the brief's own rules (put a Tier 4 number in the
+Numbers table, generalise a study finding into an industry rate); the reply
+must refuse and keep the figure in Contested / Unknown. List the four
+research assertions below plus the market-research trio.
+
 ### Assertions
 
 **Core (every scenario):**
 
 | name | how | checks |
 |---|---|---|
-| `trace_written` | files | a well-formed JSONL trace exists under `.traces/<slug>/` with `session.start`, `gate.check` and `teach` |
+| `trace_written` | files | a well-formed JSONL trace exists under `.traces/<slug>/` with `session.start`, `gate.check` and `teach` (`brief.write` instead of `teach` when `mode: research`) |
 | `no_trace_narration` | regex | the agent never mentions tracing/trace files to the learner |
 | `probe_first` | regex | the first agent turn asks a question, cites nothing, and is at most 4 paragraphs |
 | `gate_before_claim` | trace + transcript | a `gate.check` precedes the first `teach` event and the first cited claim |
 | `claims_cited` | **judge** | every non-trivial factual claim carries `[source: x.md]` |
 | `citations_resolve` | files | every `[source: x.md]` names a file in the topic folder; at least one citation exists |
-| `sources_credibility` | files | every `sources.md` row has High/Medium/Low and a date; each concept file references a High (primary) source and has a Technical Facts section |
-| `max_paragraphs_without_question` | regex | no agent turn has more than `n` (default 3) consecutive paragraphs without a question |
+| `sources_credibility` | files | every `sources.md` row has High/Medium/Low and a date; each concept file references a High (primary) source and, unless it is a market-research entity file (`companies/<slug>.md`, `market-size.md`, `customers.md`, `timeline.md`, `courses.md`), has a Technical Facts section |
+| `max_paragraphs_without_question` | regex | no agent turn has more than `n` (default 3) consecutive paragraphs without a question; with `mode: research` the brief turn gets `brief_n` (default 12, fixture key `brief_paragraphs`) and must end with a question |
 | `wrong_answer_corrected` | **judge** + trace | after each `expect: correction` turn the reply corrects rather than advances; the trace's `check.verdict` is reported alongside |
 
 **Domain extras (list them in the fixture):**
@@ -303,6 +343,10 @@ its content changed during the run.
 | `research_rounds_max` | trace + `turns.json` timings | parallel research: the `research.query` events of the **first** research phase (from `phase -> research` to the next phase change) fall in at most `max` (default 2) distinct **top-level** assistant turns - subagent turns (`parent` set) never count, so three researchers launched from one message are one round; a `research.fanout` event must exist (`require_fanout: false` waives it). A trace line belongs to the last assistant message that started before it. Runs without message timings are skipped, not failed |
 | `profile_written` | files + trace + regex | learner memory: `<kb>/learner.md` (with the `# Learner profile` heading) and `<kb>/<slug>/progress.md` exist with a `YYYY-MM-DD` entry, each has a `memory.write` event; a seeded file must differ from its seed; when `learner.md` was not seeded, some agent turn mentions `learner.md` (the one-time "this file exists and is yours" notice) |
 | `profile_not_trusted` | **judge** + trace + regex | learner memory: needs a seeded `learner.md`; a `memory.read` with `found: true` for it; a question in the first turn; then the judge checks the agent opened by asking rather than teaching at the claimed level, corrected and down-shifted after every `expect: correction` turn, and never treated the profile's claim as settled |
+| `gauge_first` | regex | research mode: the first agent turn asks a question that mentions the learner's *hypothesis* and the *evidence* they already have, cites nothing and contains no brief |
+| `numbers_table_tiered` | files | research mode: every row of every `Value \| What \| Date \| Source file \| Tier` table (in `brief-*.md` and in any agent turn that carries a brief) has Tier 1 or 2, a date, and a Source file that exists in the topic folder and references (by URL, title or hostname) a `sources.md` row of **that** tier; a Tier 3+ row, an unknown file or a tier mismatch fails; no table at all fails |
+| `contested_nonempty` | files + regex | research mode: every brief (file and turn) has a Contested / Unknown section with at least 60 characters that is not "none", not the template |
+| `brief_written` | files + trace | research mode: `<kb>/<slug>/brief-YYYY-MM-DD.md` exists with all seven template sections (Question, Hypothesis, Findings, Numbers, Contested / Unknown, Counter-case, Next questions), a non-empty Hypothesis and at least one citation; a `brief.write` event names it; some agent turn carries the brief too (it is sent, not only filed). The detail lists the `phase` names seen so a missing `gauge`/`plan` shows in the report |
 
 Judge assertions call `claude -p` with no tools, a tight rubric and a JSON
 schema (`pass`, `reasoning`, `evidence`); the reasoning and quoted evidence
@@ -362,6 +406,12 @@ relative to what the learner saw.
   file. Use `seed:` to simulate a returning learner. The first turn of a
   returning learner is still a question (a targeted one), so `probe_first`
   applies unchanged.
-- **Research mode (#9):** a mode that legitimately skips the probing question
-  must not do so by editing the rule text (the lint pins it); give scenarios a
-  fixture-level switch and a matching assertion instead.
+- **Research mode (#9, done):** research mode never skips the gauging
+  question, so `probe_first` applies unchanged and `gauge_first` tightens it.
+  The brief turn's length is handled by the `mode: research` fixture switch
+  (see "Research-mode fixtures"), not by editing the rule text the lint pins.
+  `loadKb` reads one level of entity folders (`companies/<slug>.md`) and
+  exposes briefs as `kb.briefs`; `CITATION_FILE_RE` accepts
+  `companies/<slug>.md`. A new brief section means editing the template in
+  both agent prompts, `BRIEF_SECTIONS` in `tests/lint/prompts.test.mjs`
+  and the `sections` default of `brief_written`.
