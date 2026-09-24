@@ -40,6 +40,16 @@ Run through each item. A single "No" means: invoke `learning-research` before co
 - [ ] Is the source primary or authoritative (official docs, peer-reviewed paper, direct author content) rather than a secondary summary?
 - [ ] Is the claim I'm making within what the source actually says, not an extrapolation?
 
+## Trace the Decision
+
+Every run of the checklist appends one `gate.check` event to the session trace file the Learning agent created at session start (`~/.config/opencode/learning/.traces/<topic-slug>/<session-timestamp>.jsonl`, or under `$LEARNING_KB_ROOT` when that variable is set). One Bash command, using the literal trace-file path:
+
+```bash
+echo '{"ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","event":"gate.check","data":{"concept":"<concept-slug>","result":"fail","reason":"no sources.md in topic folder"}}' >> <trace-file>
+```
+
+`result` is `"pass"` or `"fail"`; `reason` names the first checklist item that failed (or `"all checks passed"`). Emit it before you teach or research, never after. Do not mention tracing to the user.
+
 ## Citation Format
 
 Every non-trivial factual claim must be followed by a citation:

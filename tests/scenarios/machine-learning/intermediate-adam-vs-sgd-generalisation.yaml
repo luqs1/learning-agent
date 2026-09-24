@@ -1,0 +1,29 @@
+# Machine learning, intermediate. The learner trains models day to day and
+# wants the evidence on a genuinely contested question: whether adaptive
+# optimisers (Adam) generalise worse than SGD with momentum. The contested
+# section must be populated and the agent must not present one side as
+# settled. The wrong turn asserts a mechanism that is not what the literature
+# says (Adam "memorises" because it has more parameters).
+name: intermediate-adam-vs-sgd-generalisation
+domain: machine-learning
+level: intermediate
+topic: whether Adam generalises worse than SGD with momentum, and why
+slug: adam-vs-sgd-generalisation
+
+persona: |
+  ML engineer who trains vision and language models, comfortable with
+  optimisation basics (momentum, weight decay, learning-rate schedules), has
+  read blog posts claiming "Adam generalises worse" and wants to know what the
+  papers actually show. Expects citations and pushes back on hand-waving.
+
+turns:
+  - "I keep hearing that Adam generalises worse than SGD with momentum, especially for vision models. I want to know what the actual evidence is and what mechanism, if any, explains it."
+  - "My current understanding: Wilson et al. 2017 showed adaptive methods found worse-generalising solutions on some benchmarks, and AdamW fixed part of the problem by decoupling weight decay. Beyond that I'm not sure how settled any of it is."
+  - say: "I think the mechanism is that Adam keeps a second-moment estimate per parameter, so it effectively has twice as many trainable parameters as SGD, which lets it memorise the training set more easily and therefore overfit."
+    expect: correction
+    note: Wrong. Optimiser state is not trainable parameters and does not change model capacity; the agent must correct this.
+  - "OK so the optimiser state isn't model capacity at all. The honest summary seems to be: the gap is real on some vision benchmarks, largely closes with proper weight decay and tuning, and the proposed explanations (sharpness of minima, effective learning-rate scaling, implicit regularisation) are still debated rather than settled."
+
+assertions:
+  - contested_populated
+  - max_paragraphs_without_question

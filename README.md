@@ -125,6 +125,15 @@ Inside any Claude Code session, type `/learn <topic>`. This spins up the learnin
 
 Knowledge base is stored at `~/.claude/learning/<topic-slug>/`.
 
+## Session traces
+
+Every session also writes a small JSONL trace next to the knowledge base
+(`<kb-root>/.traces/<topic-slug>/<timestamp>.jsonl`): one line per gate
+decision, research query, file written, teaching step and comprehension check.
+`npm run trace` (from a checkout of this repo) prints the latest one as a
+timeline. Traces exist so prompt changes can be tested; see
+[tests/README.md](./tests/README.md) for the format and the test suites.
+
 ## Uninstall
 
 **opencode:**

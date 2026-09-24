@@ -20,6 +20,16 @@ All research is stored at: `~/.config/opencode/learning/<topic-slug>/`
 - Keep it stable across sessions (don't invent a new slug each time)
 - Examples: `makemore-neural-networks`, `linux-networking`, `rust-ownership-model`
 
+## Tracing
+
+This skill appends events to the session trace file the Learning agent created at session start (`~/.config/opencode/learning/.traces/<topic-slug>/<session-timestamp>.jsonl`, or under `$LEARNING_KB_ROOT` when that variable is set). Each event is one Bash command of the form `echo '{"ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","event":"<name>","data":{...}}' >> <trace-file>`, using the literal trace-file path. Emit:
+
+- `research.query` after every search: `{"provider":"web_search","query":"<query>","material_type":"<docs|paper|blog|talk|dataset|news|other>"}`
+- `research.fetch` after every fetch: `{"url":"<url>","ok":true}` (or `false` if the fetch failed or returned nothing useful)
+- `kb.write` after every file you create or update in the topic folder: `{"file":"<concept-slug>.md"}` (also for `sources.md`)
+
+Keep values under 200 characters, use only double quotes inside the JSON, never put a single quote in a value. Several events may be chained in one command with `&&`. Do not mention tracing to the user.
+
 ## Phase 1: Setup
 
 1. Derive the topic slug from the current conversation
@@ -126,6 +136,8 @@ Add each fetched source to `sources.md`:
 ```
 | [URL] | [Title] | [Today's date] | [High/Medium/Low] | [One-line summary] |
 ```
+
+The Credibility cell must be exactly one word - `High`, `Medium` or `Low` - so it can be parsed; put any qualifier ("official docs", "accessed via summary") in the Summary cell. The Date Accessed cell is `YYYY-MM-DD`.
 
 Credibility guide:
 - **High**: Original paper, official docs, direct author content (their own blog, talk, or repo)

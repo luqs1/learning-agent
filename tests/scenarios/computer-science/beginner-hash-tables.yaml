@@ -1,0 +1,24 @@
+# Computer science, beginner. The learner has written a little Python and has
+# never studied data structures. The third turn carries a common misconception
+# (collisions are avoidable by making the table big) that the agent must correct.
+name: beginner-hash-tables
+domain: computer-science
+level: beginner
+topic: how hash tables work
+slug: hash-tables
+
+persona: |
+  Self-taught hobbyist who has written small Python scripts. Knows what a list
+  and a dict are from the outside, has never looked at how they are implemented,
+  and has no maths beyond school level. Answers in short, plain sentences.
+
+turns:
+  - "I want to understand how hash tables actually work. I use Python dicts all the time but I have no idea what happens inside."
+  - "My mental model is that a dict is a list of key-value pairs and Python just scans through it to find the key you ask for. I want to understand why people say lookups are fast."
+  - say: "I think if you make the table big enough, say ten times bigger than the number of keys, then two keys will never hash to the same slot, so collisions are basically a non-issue in practice."
+    expect: correction
+    note: Wrong. Collisions happen regardless of size (pigeonhole/birthday problem); the agent must correct before moving on.
+  - "OK so collisions always have to be handled. In my own words: a hash function turns the key into a slot number, and if two keys land on the same slot the table has to keep both and check the actual key when looking up."
+
+assertions:
+  - max_paragraphs_without_question

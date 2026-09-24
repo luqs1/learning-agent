@@ -1,0 +1,32 @@
+# Market research, beginner. A first-time founder sizing "AI tutoring for
+# online course creators". Every numeric claim must cite a High/Medium dated
+# source; paywalled analyst figures (Statista, Grand View Research, etc.) may
+# not be presented as fact; company self-reports must be marked as such. The
+# wrong turn does bottom-up sizing by multiplying two unverified numbers and
+# calling the result the market size.
+name: beginner-ai-tutoring-for-course-creators
+domain: market-research
+level: beginner
+topic: the market for AI tutoring tools sold to online course creators
+slug: ai-tutoring-for-course-creators
+
+persona: |
+  First-time founder, product background, no market-research training. Has
+  seen a few "the e-learning market is worth $X billion" headlines and wants a
+  defensible view of the market for AI tutoring add-ons that course creators
+  (Teachable, Kajabi, Udemy instructors) could buy. Asks direct questions and
+  is impatient with jargon.
+
+turns:
+  - "I'm thinking of building an AI tutor that online course creators can add to their courses. I want to do proper market research on this - how big it is, who the buyers are, and who's already doing it. Where do I start?"
+  - "My current view is basically from headlines: e-learning is a huge market, there are millions of creators on platforms like Udemy and Teachable, and if even a small fraction paid for an AI tutor it'd be a big business. I haven't checked any of the numbers."
+  - say: "Here's my sizing: there are about 100 million online creators, say 10% sell courses, and if each pays $50 a month for an AI tutor that's a $6 billion market. That's my TAM and I think it's solid enough to put in a deck."
+    expect: correction
+    note: Wrong method - unverified inputs multiplied together, creator count conflated with course sellers; the agent must challenge the inputs and the method, not accept the figure.
+  - "Fair - I should start from verified counts of paying course creators on the main platforms and what they already spend on add-ons, mark anything that comes from a company's own marketing as self-reported, and treat any analyst headline number I can't get the report for as unverified."
+
+assertions:
+  - numeric_claims_cited
+  - no_paywalled_as_fact
+  - first_vs_third_party
+  - max_paragraphs_without_question

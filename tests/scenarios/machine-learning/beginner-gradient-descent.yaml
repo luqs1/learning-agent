@@ -1,0 +1,24 @@
+# Machine learning, beginner. The learner can code but has never trained a
+# model. The wrong turn holds the classic "bigger learning rate is always
+# faster" misconception, which the agent must correct (divergence/overshoot).
+name: beginner-gradient-descent
+domain: machine-learning
+level: beginner
+topic: what gradient descent is and how the learning rate affects training
+slug: gradient-descent
+
+persona: |
+  Web developer with no maths past school and no ML experience, following an
+  online course that hand-waved gradient descent. Can read Python. Likes
+  concrete examples and gets lost in notation quickly.
+
+turns:
+  - "I'm doing an online ML course and they keep saying the model 'learns by gradient descent'. I write JavaScript for a living, no real maths. Can you help me actually understand it?"
+  - "My best guess: the model makes a prediction, you measure how wrong it was, and gradient descent nudges the numbers inside the model so the next prediction is a bit less wrong. I don't know what the 'gradient' part means or where the learning rate comes in."
+  - say: "So the learning rate is just how big each nudge is. That means a bigger learning rate is always better because you get to the answer in fewer steps - you'd only make it small if you had lots of spare compute."
+    expect: correction
+    note: Wrong. Too large a learning rate overshoots or diverges; the agent must correct rather than move on.
+  - "Got it - the gradient tells you which direction makes the loss go down fastest, the learning rate scales the step, and too big a step can jump over the bottom of the valley or blow up entirely. Small enough to converge, big enough to be practical."
+
+assertions:
+  - max_paragraphs_without_question

@@ -53,11 +53,21 @@ Runtime flow: **assessment gate → research if it fails → teach with
 │
 ├── .opencode/
 │   └── plugins/learning-agent.js     # registers the opencode agent + skills at runtime
-└── opencode/                         # ── OPENCODE plugin assets ──
-    ├── agents/learning.md            # agent prompt (opencode flavour)
-    └── skills/
-        ├── learning-assessment/SKILL.md
-        └── learning-research/SKILL.md
+├── opencode/                         # ── OPENCODE plugin assets ──
+│   ├── agents/learning.md            # agent prompt (opencode flavour)
+│   └── skills/
+│       ├── learning-assessment/SKILL.md
+│       └── learning-research/SKILL.md
+│
+├── scripts/trace-summary.mjs         # prints a session trace as a timeline (npm run trace)
+├── tests/                            # see tests/README.md
+│   ├── lint/                         # deterministic checks, no model (npm test)
+│   ├── lib/                          # shared helpers: frontmatter, yaml subset, repo paths
+│   └── scenarios/                    # model-driven scenario tests (npm run test:scenarios)
+│       ├── run.mjs                   # runner: claude -p, turn by turn
+│       ├── lib/                      # driver, assertions, judge, kb parsing, report
+│       └── <domain>/<name>.yaml      # one fixture per scenario
+└── .github/workflows/test.yml        # lint on PRs; scenarios nightly / on demand
 ```
 
 ## Dual-platform structure — keep both trees in sync (IMPORTANT)
@@ -101,6 +111,41 @@ When bumping the version, update it in all three manifests:
   plugin parses frontmatter itself (see `parseFrontmatter` in the plugin JS), so
   keep frontmatter simple (`key: value`, no nested YAML).
 - Prefer editing the prompt/skill content in plain prose; this *is* the product.
+
+## Testing
+
+Full details in [tests/README.md](./tests/README.md). The short version:
+
+- **`npm test`** — deterministic lint, no model calls, runs in seconds. Fails
+  on: invalid frontmatter, any claude/opencode drift beyond the allowed
+  differences above, mismatched manifest versions, a shared skill that is not
+  `user-invocable: false`, a `[source: ...]` example in the wrong format, any
+  wording that permits skipping the probing question, a missing trace event in
+  either tree, or a broken scenario fixture. Run it before every commit that
+  touches a prompt or skill. CI runs it on every PR.
+- **`npm run test:scenarios`** — drives the real agent (`claude -p`) through
+  scripted learner sessions and checks the transcript, the knowledge base and
+  the trace: gate before the first claim, citations resolve to real files,
+  `sources.md` rows rated and dated, probing question first, no lecturing
+  streaks, wrong answers corrected rather than advanced, plus medicine and
+  market-research extras. Costs tokens; runs nightly and on demand in CI,
+  gated on the `ANTHROPIC_API_KEY` secret. Reports land in
+  `tests/scenarios/.runs/<stamp>/` (git-ignored).
+- **Adding a scenario** = adding one YAML file at
+  `tests/scenarios/<domain>/<name>.yaml` with a topic, a learner persona,
+  scripted turns (mark one `expect: correction`) and any extra assertions.
+  Nothing else changes. `npm run test:scenarios -- --dry-run` validates it.
+- **Reading a trace** — every session writes
+  `<kb-root>/.traces/<topic-slug>/<timestamp>.jsonl`, one `{ts, event, data}`
+  per line (`session.start`, `phase`, `gate.check`, `research.query`,
+  `research.fetch`, `kb.write`, `teach`, `check.ask`, `check.verdict`,
+  `session.end`). `npm run trace` prints the latest one as a timeline; a
+  `teach` with no preceding `gate.check`, or a `check.verdict` of
+  `wrong -> advance`, is a regression. Set `LEARNING_KB_ROOT` to point the
+  agent (and its traces) at a different root; the test harness does this.
+- When you add a trace event or change the `sources.md` layout, update **both**
+  agent prompts / skills and the tables in `tests/README.md`; the lint checks
+  the trees agree.
 
 ## Install / distribution (reference)
 
