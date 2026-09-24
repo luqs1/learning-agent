@@ -41,6 +41,8 @@ for (const [name, platform] of Object.entries(PLATFORMS)) {
     assert.match(body, /read every source in full/i);
     assert.ok(body.includes(platform.kbPath), `must mention the ${name} knowledge-base root`);
     assert.match(body, /fanout\.sh/, "must fan out within its angle");
+    assert.match(body, /Phase 3b: Fan-out/, "must verify the preloaded skill is the plugin copy");
+    assert.match(body, /<Scripts dir>\/\.\.\/SKILL\.md/, "must know where to read the plugin skill from when a stale copy was preloaded");
     assert.doesNotMatch(body, /\[source: (?!filename\.md)[a-z-]+\.md\]/, "a researcher writes URL citations, not concept-file citations");
   });
 }

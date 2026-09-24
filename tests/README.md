@@ -201,8 +201,10 @@ npm run test:scenarios -- --evaluate tests/scenarios/.runs/<stamp>   # re-run as
 a saved run in seconds, then re-drive once it does what you mean.
 
 Environment knobs: `SCENARIO_MODEL` (default `sonnet`), `SCENARIO_JUDGE_MODEL`
-(default `sonnet`), `SCENARIO_FIRST_TURN_BUDGET_USD` (default 6; the first
-turn does the research), `SCENARIO_TURN_BUDGET_USD` (default 3),
+(default `sonnet`), `SCENARIO_FIRST_TURN_BUDGET_USD` (default 6),
+`SCENARIO_TURN_BUDGET_USD` (default 6; research usually lands in turn 2, after
+the learner answers the probing question, and spawns three researcher
+subagents - these are caps, not spend),
 `SCENARIO_TURN_TIMEOUT_S` (default 1200).
 
 Each run writes `tests/scenarios/.runs/<stamp>/`:

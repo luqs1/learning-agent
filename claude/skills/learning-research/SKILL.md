@@ -244,13 +244,18 @@ Angle: technical | expert | contested        (market research: primary-documents
                                               customer-sentiment, market-size, news, patents)
 KB root: <absolute path of the knowledge-base root>   (topic folder: <root>/<topic-slug>/)
 Trace file: <literal path of this session's trace file>
+Scripts dir: ${CLAUDE_SKILL_DIR}/scripts   (absolute; this skill's SKILL.md is one level up)
 Already have: <URLs already in sources.md, or "nothing">
 Learner: <level and what they said>; questions to answer: <1–3 bullets>
 ```
 
-Each researcher runs the routing table for its angle, reads its sources in
-full, and writes `<root>/<topic-slug>/.research/<concept-slug>-<angle>.md`
-plus rows in `.research/sources-<angle>.md`. When all three return, go to
+Launch them in the foreground (no background flag) and wait for all three;
+the `Scripts dir` line is what lets a researcher find the helper scripts and
+this exact skill text even when a same-named skill elsewhere on the machine
+shadows the plugin copy. Each researcher runs the routing table for its
+angle, reads its sources in full, and writes
+`<root>/<topic-slug>/.research/<concept-slug>-<angle>.md` plus rows in
+`.research/sources-<angle>.md`. When all three return, go to
 **Merging angle fragments** in Phase 6. If one returns nothing usable, run
 that angle yourself with B before merging — Angle 2 is not optional. A
 researcher never launches researchers; inside one, use B.

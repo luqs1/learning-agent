@@ -147,6 +147,8 @@ test("research skill: the fan-out section issues all independent calls in one me
   assert.ok(numbered.length >= 5, `worked example lists ${numbered.length} tool calls; want at least 5`);
   assert.match(fan, /Topic slug: <topic-slug>/, "the researcher brief template is missing");
   assert.match(fan, /Trace file: <literal path/);
+  assert.ok(fan.includes(`Scripts dir: ${SKILL_SCRIPTS_PREFIX}`), "the brief must hand the researcher the resolved scripts directory");
+  assert.match(fan, /foreground/, "researchers are launched in the foreground and awaited");
   assert.match(fan, /every source is still read in full/i, "the iron law must be restated for the fan-out");
   assert.match(fan, /never launches researchers/);
   const tracing = section(body, "## Tracing");

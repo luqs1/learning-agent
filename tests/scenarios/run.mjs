@@ -40,7 +40,10 @@ const model = argv.model || process.env.SCENARIO_MODEL || "sonnet";
 const judgeModel = argv["judge-model"] || DEFAULT_JUDGE_MODEL;
 const concurrency = Math.max(1, Number(argv.j || argv.concurrency || 1));
 const firstTurnBudget = Number(process.env.SCENARIO_FIRST_TURN_BUDGET_USD || 6);
-const turnBudget = Number(process.env.SCENARIO_TURN_BUDGET_USD || 3);
+// Research usually lands in turn 2 (the gate runs after the learner answers the
+// probing question) and now spawns three researcher subagents, so the later
+// turns get the same cap as the first. These are caps, not spend.
+const turnBudget = Number(process.env.SCENARIO_TURN_BUDGET_USD || 6);
 const turnTimeoutMs = Number(process.env.SCENARIO_TURN_TIMEOUT_S || 1200) * 1000;
 
 let scenarios;
