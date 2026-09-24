@@ -11,7 +11,7 @@ import { parseYaml } from "../lib/yaml.mjs";
 import { summarise } from "../../scripts/trace-summary.mjs";
 import { ASSERTIONS, CORE_ASSERTIONS } from "../scenarios/lib/assertions.mjs";
 import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility, tierToCredibility, referencesAnyRow } from "../scenarios/lib/kb.mjs";
-import { buildArgs, harnessSystemPrompt } from "../scenarios/lib/driver.mjs";
+import { buildArgs, harnessSystemPrompt, ingestEvent, newTurn } from "../scenarios/lib/driver.mjs";
 
 const REQUIRED_DOMAINS = { "computer-science": 2, medicine: 2, "machine-learning": 2, "market-research": 2 };
 
@@ -109,13 +109,26 @@ Open addressing vs chaining trade-offs depend on workload; sources differ on cac
     [
       '{"ts":"2026-09-24T10:00:00Z","event":"session.start","data":{"topic":"hash tables","slug":"hash-tables"}}',
       '{"ts":"2026-09-24T10:00:05Z","event":"gate.check","data":{"concept":"hash-collisions","result":"fail","reason":"no topic folder"}}',
-      '{"ts":"2026-09-24T10:01:00Z","event":"kb.write","data":{"file":"hash-collisions.md"}}',
+      '{"ts":"2026-09-24T10:00:59Z","event":"phase","data":{"from":"probe","to":"research"}}',
+      // Search turn (assistant message at 10:01:00): fanout + three angle searches in one message.
+      '{"ts":"2026-09-24T10:01:01Z","event":"research.fanout","data":{"angles":["technical","expert","contested"],"parallel":true}}',
+      '{"ts":"2026-09-24T10:01:01Z","event":"research.query","data":{"provider":"arxiv.sh","query":"hash table collision resolution","material_type":"paper"}}',
+      '{"ts":"2026-09-24T10:01:01Z","event":"research.query","data":{"provider":"WebSearch","query":"hash table collisions what actually matters","material_type":"blog"}}',
+      '{"ts":"2026-09-24T10:01:01Z","event":"research.query","data":{"provider":"WebSearch","query":"open addressing vs chaining debate","material_type":"other"}}',
+      // Fetch turn (assistant message at 10:01:20): fetches plus the similarity query.
+      '{"ts":"2026-09-24T10:01:21Z","event":"research.fetch","data":{"url":"https://docs.python.org/3/faq/design.html","ok":true}}',
+      '{"ts":"2026-09-24T10:01:21Z","event":"research.query","data":{"provider":"s2.sh","query":"recommend arXiv:1104.5111","material_type":"paper"}}',
+      '{"ts":"2026-09-24T10:01:38Z","event":"phase","data":{"from":"research","to":"merge"}}',
+      '{"ts":"2026-09-24T10:01:41Z","event":"kb.write","data":{"file":"hash-collisions.md"}}',
+      '{"ts":"2026-09-24T10:01:45Z","event":"phase","data":{"from":"merge","to":"teach"}}',
       '{"ts":"2026-09-24T10:02:00Z","event":"teach","data":{"concept":"hash-collisions","citations":["hash-collisions.md"]}}',
       '{"ts":"2026-09-24T10:03:00Z","event":"check.verdict","data":{"concept":"hash-collisions","verdict":"wrong","action":"correct"}}',
       '{"ts":"2026-09-24T10:04:00Z","event":"memory.write","data":{"file":"learner.md"}}',
       '{"ts":"2026-09-24T10:04:01Z","event":"memory.write","data":{"file":"hash-tables/progress.md"}}',
     ].join("\n") + "\n",
   );
+  fs.mkdirSync(path.join(topic, ".research"));
+  fs.writeFileSync(path.join(topic, ".research", "hash-collisions-technical.md"), "# Hash collisions — technical\n\nAngle: technical\n\n## Facts\n1. Collisions are unavoidable. [source: https://docs.python.org/3/faq/design.html] (section: dict) — Tier 1 — \"quote\"\n");
   fs.writeFileSync(path.join(root, "learner.md"), "# Learner profile\n\n## Background and expertise\n- 2026-09-24: hobbyist, small Python scripts (self-reported)\n");
   fs.writeFileSync(path.join(topic, "progress.md"), "# Progress: hash tables\n\nLast session: 2026-09-24\n\n## Concepts covered\n| concept | date | check | verdict |\n|---|---|---|---|\n| hash-collisions | 2026-09-24 | what happens on collision | wrong -> correct |\n");
   return root;
@@ -135,9 +148,18 @@ function syntheticCtx(overrides = {}) {
   const root = syntheticKb();
   const kb = loadKb(root, "hash-tables");
   const t = (ms) => Date.parse("2026-09-24T10:00:00Z") + ms;
+  // Top-level assistant messages of the research turn: search (fanout + 3 searches in one
+  // message), fetch (+ similarity query), read, write, then the teaching text.
+  const researchMessages = [
+    { id: "m-search", at: t(60_000), parent: null, tools: ["Bash", "Bash", "WebSearch", "WebSearch"] },
+    { id: "m-fetch", at: t(80_000), parent: null, tools: ["Bash", "Bash"] },
+    { id: "m-read", at: t(95_000), parent: null, tools: ["Read", "Read"] },
+    { id: "m-write", at: t(100_000), parent: null, tools: ["Write", "Write", "Bash"] },
+    { id: "m-teach", at: t(115_000), parent: null, tools: [] },
+  ];
   const turns = [
-    { learner: "teach me", agent: { text: "Before we start - what is your current mental model of a dict?", startedAt: t(0), endedAt: t(3000) } },
-    { learner: "a list", agent: { text: "A hash function maps a key to a slot [source: hash-collisions.md].\n\nCollisions are unavoidable [source: hash-collisions.md].\n\nWhat happens when two keys share a slot?", startedAt: t(60_000), endedAt: t(130_000) } },
+    { learner: "teach me", agent: { text: "Before we start - what is your current mental model of a dict?", startedAt: t(0), endedAt: t(3000), messages: [{ id: "m-probe", at: t(500), parent: null, tools: ["Bash"] }] } },
+    { learner: "a list", agent: { text: "A hash function maps a key to a slot [source: hash-collisions.md].\n\nCollisions are unavoidable [source: hash-collisions.md].\n\nWhat happens when two keys share a slot?", startedAt: t(60_000), endedAt: t(130_000), messages: researchMessages } },
     { learner: "never happens", expect: "correction", agent: { text: "Not quite - collisions always happen. Why?", startedAt: t(170_000), endedAt: t(190_000) } },
     { learner: "ok, collisions are handled by chaining. Done for today.", agent: { text: "Good. I keep a short profile of what we covered at " + path.join(root, "learner.md") + " - plain markdown, yours to edit or delete. Next time we start from open addressing.", startedAt: t(230_000), endedAt: t(250_000) } },
   ];
@@ -231,6 +253,113 @@ test("assertions: wrong_answer_corrected records trace evidence and the judge ve
   const r2 = await ASSERTIONS.wrong_answer_corrected.run(ctx, {});
   assert.equal(r2.pass, false);
   assert.match(r2.reasoning, /accepted/);
+});
+
+// ---------- parallel research (#7) ----------
+
+test("kb: .research/ fragments are exposed as kb.fragments and are never concept files", () => {
+  const kb = loadKb(syntheticKb(), "hash-tables");
+  assert.deepEqual(Object.keys(kb.fragments), [".research/hash-collisions-technical.md"]);
+  assert.match(kb.fragments[".research/hash-collisions-technical.md"], /^Angle: technical/m);
+  assert.deepEqual(kb.conceptFiles, ["hash-collisions.md"], "a fragment must not count as a concept file");
+  assert.ok(!Object.keys(kb.files).some((f) => f.includes(".research")));
+});
+
+test("assertions: research_rounds_max counts the distinct top-level assistant turns that contain searches in the first research phase", () => {
+  const good = ASSERTIONS.research_rounds_max.run(syntheticCtx(), {});
+  assert.equal(good.pass, true, good.detail);
+  assert.match(good.detail, /4 searches in 2 assistant turn\(s\)/);
+  assert.match(good.detail, /fanout angles=\[technical, expert, contested\]/);
+
+  // Tighter bound: the fetch-turn similarity query is a second round.
+  const tight = ASSERTIONS.research_rounds_max.run(syntheticCtx(), { max: 1 });
+  assert.equal(tight.pass, false);
+  assert.match(tight.detail, /spread over 2 assistant turns \(max 1\): 3\+1 per turn/);
+
+  // One search per turn (the pre-#7 behaviour): three extra messages, each with its own query.
+  const serial = syntheticCtx();
+  const t = (ms) => Date.parse("2026-09-24T10:00:00Z") + ms;
+  serial.turns[1].agent.messages = [
+    { id: "s1", at: t(60_000), parent: null, tools: ["WebSearch"] },
+    { id: "s2", at: t(65_000), parent: null, tools: ["WebSearch"] },
+    { id: "s3", at: t(70_000), parent: null, tools: ["WebSearch"] },
+    { id: "s4", at: t(80_000), parent: null, tools: ["Bash"] },
+    { id: "s5", at: t(100_000), parent: null, tools: ["Write"] },
+  ];
+  const q = (sec, query) => ({ ts: `2026-09-24T10:01:${String(sec).padStart(2, "0")}Z`, event: "research.query", data: { provider: "WebSearch", query, material_type: "other" } });
+  serial.events = serial.events.filter((e) => e.event !== "research.query").concat([q(1, "a"), q(6, "b"), q(11, "c"), q(21, "d")]).sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+  const r = ASSERTIONS.research_rounds_max.run(serial, { max: 2 });
+  assert.equal(r.pass, false);
+  assert.match(r.detail, /4 searches spread over 4 assistant turns \(max 2\)/);
+
+  // Subagent turns (parent set) do not count as rounds: three researchers launched from one message.
+  const fanned = syntheticCtx();
+  fanned.turns[1].agent.messages = [
+    { id: "p1", at: t(60_000), parent: null, tools: ["Bash", "Agent", "Agent", "Agent"] },
+    { id: "c1", at: t(61_000), parent: "toolu_1", tools: ["Bash"] },
+    { id: "c2", at: t(62_000), parent: "toolu_2", tools: ["WebSearch"] },
+    { id: "c3", at: t(70_000), parent: "toolu_3", tools: ["Bash"] },
+    { id: "p2", at: t(100_000), parent: null, tools: ["Read", "Read", "Read"] },
+    { id: "p3", at: t(110_000), parent: null, tools: ["Write"] },
+  ];
+  const f = ASSERTIONS.research_rounds_max.run(fanned, { max: 1 });
+  assert.equal(f.pass, true, f.detail);
+  assert.match(f.detail, /in 1 assistant turn\(s\)/);
+
+  // No fanout event: fails unless require_fanout is off.
+  const noFan = syntheticCtx();
+  noFan.events = noFan.events.filter((e) => e.event !== "research.fanout");
+  assert.match(ASSERTIONS.research_rounds_max.run(noFan, {}).detail, /no research\.fanout event/);
+  assert.equal(ASSERTIONS.research_rounds_max.run(noFan, { require_fanout: false }).pass, true);
+
+  // Old runs without message timings are skipped, not failed.
+  const old = syntheticCtx();
+  for (const turn of old.turns) delete turn.agent.messages;
+  const s = ASSERTIONS.research_rounds_max.run(old, {});
+  assert.equal(s.skipped, true);
+
+  // Only the first research phase is counted: a later research phase with serial searches is ignored.
+  const later = syntheticCtx();
+  later.events = later.events.concat([
+    { ts: "2026-09-24T10:02:50Z", event: "phase", data: { from: "teach", to: "research" } },
+    { ts: "2026-09-24T10:02:51Z", event: "research.query", data: { provider: "WebSearch", query: "later-a", material_type: "other" } },
+    { ts: "2026-09-24T10:02:56Z", event: "research.query", data: { provider: "WebSearch", query: "later-b", material_type: "other" } },
+    { ts: "2026-09-24T10:03:01Z", event: "research.query", data: { provider: "WebSearch", query: "later-c", material_type: "other" } },
+  ]);
+  later.turns[2].agent.messages = [
+    { id: "l1", at: t(170_000), parent: null, tools: ["WebSearch"] },
+    { id: "l2", at: t(175_000), parent: null, tools: ["WebSearch"] },
+    { id: "l3", at: t(180_000), parent: null, tools: ["WebSearch"] },
+  ];
+  assert.equal(ASSERTIONS.research_rounds_max.run(later, {}).pass, true, "a later research phase is not the first one");
+});
+
+test("driver: stream-json events are grouped into assistant messages, subagent output stays out of the transcript", () => {
+  const turn = newTurn(1000);
+  const ev = (over) => ({ type: "assistant", parent_tool_use_id: null, timestamp: "2026-09-24T15:59:49.831Z", message: { id: "msg_1", content: [] }, ...over });
+  ingestEvent(turn, ev({ message: { id: "msg_1", content: [{ type: "text", text: "Launching research." }] } }));
+  ingestEvent(turn, ev({ message: { id: "msg_1", content: [{ type: "tool_use", name: "Agent", input: { subagent_type: "learning-agent:learning-researcher", description: "Research hash-collisions (technical)" } }] } }));
+  ingestEvent(turn, ev({ message: { id: "msg_1", content: [{ type: "tool_use", name: "Agent", input: { subagent_type: "learning-agent:learning-researcher", description: "Research hash-collisions (expert)" } }] } }));
+  ingestEvent(turn, { type: "system", subtype: "task_started", subagent_type: "learning-agent:learning-researcher", description: "Research hash-collisions (technical)", tool_use_id: "toolu_1", is_backgrounded: false });
+  ingestEvent(turn, ev({ parent_tool_use_id: "toolu_1", timestamp: "2026-09-24T15:59:51.718Z", message: { id: "msg_child", content: [{ type: "text", text: "I will search arXiv now." }, { type: "tool_use", name: "Bash", input: { command: "fanout.sh ..." } }] } }));
+  ingestEvent(turn, ev({ timestamp: "2026-09-24T16:00:02.356Z", message: { id: "msg_2", content: [{ type: "text", text: "Here is the concept." }] } }));
+  ingestEvent(turn, { type: "result", subtype: "success", total_cost_usd: 0.5, num_turns: 3 });
+  assert.deepEqual(turn.messages.map((m) => [m.id, m.parent, m.tools]), [["msg_1", null, ["Agent", "Agent"]], ["msg_child", "toolu_1", ["Bash"]], ["msg_2", null, []]]);
+  assert.equal(turn.messages[0].at, Date.parse("2026-09-24T15:59:49.831Z"));
+  assert.deepEqual(turn.toolNames, ["Agent", "Agent"], "subagent tool calls are not top-level tools");
+  assert.deepEqual(turn.subagentToolNames, ["Bash"]);
+  assert.deepEqual(turn.subagents.map((s) => s.type), ["learning-agent:learning-researcher"]);
+  turn.text = turn.blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n\n");
+  assert.ok(!turn.text.includes("I will search arXiv"), "subagent text must not reach the learner-visible transcript");
+  assert.match(turn.blocks[1].summary, /learning-researcher: Research hash-collisions \(technical\)/);
+  assert.equal(turn.costUsd, 0.5);
+});
+
+test("trace-summary: research.fanout is summarised", () => {
+  const events = allEvents(loadKb(syntheticKb(), "hash-tables"));
+  const s = summarise(events);
+  assert.deepEqual(s.fanouts, ["technical+expert+contested"]);
+  assert.equal(s.counts["research.fanout"], 1);
 });
 
 // ---------- learner memory (#8) ----------

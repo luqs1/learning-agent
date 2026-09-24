@@ -88,6 +88,8 @@ function describe(e) {
       return `phase          ${d.from} -> ${d.to}`;
     case "gate.check":
       return `gate ${String(d.result).padEnd(4)}      ${d.concept}: ${d.reason ?? ""}`;
+    case "research.fanout":
+      return `fanout         angles=[${(d.angles || []).join(", ")}]${d.parallel ? " parallel" : ""}`;
     case "research.query":
       return `query          [${d.provider}/${d.material_type}] ${d.query}`;
     case "research.fetch":
@@ -121,6 +123,7 @@ export function summarise(events) {
     concepts_taught: [...new Set(events.filter((e) => e.event === "teach").map((e) => e.data.concept))],
     gate_fails: events.filter((e) => e.event === "gate.check" && e.data.result === "fail").length,
     files_written: [...new Set(events.filter((e) => e.event === "kb.write").map((e) => e.data.file))],
+    fanouts: events.filter((e) => e.event === "research.fanout").map((e) => (e.data.angles || []).join("+")),
     memory_read: events.filter((e) => e.event === "memory.read").map((e) => `${e.data.file}${e.data.found ? "" : " (absent)"}`),
     memory_written: [...new Set(events.filter((e) => e.event === "memory.write").map((e) => e.data.file))],
   };
@@ -148,6 +151,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (const err of errors) console.log(`  line ${err.line}: MALFORMED (${err.error}) ${err.raw.slice(0, 120)}`);
   const s = summarise(events);
   console.log("");
-  console.log(`Summary: ${s.events} events over ${s.duration_s ?? "?"}s; concepts taught: ${s.concepts_taught.join(", ") || "none"}; gate fails: ${s.gate_fails}; files written: ${s.files_written.length}; memory read: ${s.memory_read.join(", ") || "none"}; memory written: ${s.memory_written.join(", ") || "none"}`);
+  console.log(`Summary: ${s.events} events over ${s.duration_s ?? "?"}s; concepts taught: ${s.concepts_taught.join(", ") || "none"}; gate fails: ${s.gate_fails}; files written: ${s.files_written.length}; fan-outs: ${s.fanouts.length}; memory read: ${s.memory_read.join(", ") || "none"}; memory written: ${s.memory_written.join(", ") || "none"}`);
   console.log(`Counts: ${Object.entries(s.counts).map(([k, v]) => `${k}=${v}`).join("  ")}`);
 }

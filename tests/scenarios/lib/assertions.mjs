@@ -296,6 +296,54 @@ FAIL if self-reported company claims are presented with the same authority as in
     },
   },
 
+  research_rounds_max: {
+    describe: "parallel research: during the first research phase the research.query events fall in at most N distinct top-level assistant turns (independent searches were issued in one message), and a research.fanout event was emitted",
+    run(ctx, { max = 2, require_fanout = true } = {}) {
+      const queries = ctx.events.filter((e) => e.event === "research.query");
+      if (!queries.length) return { pass: false, detail: "no research.query events in the trace" };
+      // Assistant turns with timings, top level only (subagent turns carry `parent`).
+      const messages = ctx.turns
+        .flatMap((t, i) => (t.agent.messages || []).filter((m) => !m.parent).map((m) => ({ ...m, turn: i + 1 })))
+        .filter((m) => Number.isFinite(m.at))
+        .sort((a, b) => a.at - b.at);
+      if (!messages.length) return { pass: true, skipped: true, detail: "turns.json carries no assistant-message timings (run predates research_rounds_max)" };
+      // The first research phase: from the first `phase -> research` to the next phase change out of it.
+      const phases = ctx.events.map((e, i) => ({ e, i })).filter(({ e }) => e.event === "phase");
+      const start = phases.find(({ e }) => e.data.to === "research");
+      const end = start ? phases.find(({ e, i }) => i > start.i && e.data.from === "research") : null;
+      const startMs = start ? Date.parse(start.e.ts) : -Infinity;
+      const endMs = end ? Date.parse(end.e.ts) : Infinity;
+      let inPhase = queries.filter((q) => {
+        const t = Date.parse(q.ts);
+        return t >= startMs - TRACE_TOLERANCE_MS && t <= endMs + TRACE_TOLERANCE_MS;
+      });
+      const note = start ? "" : " (no phase -> research event; all searches counted)";
+      if (!inPhase.length) inPhase = queries;
+      // A trace line is written while the tools of the latest assistant message run, so it
+      // belongs to the last message that started before it (trace ts has 1 s resolution).
+      const roundOf = (ts) => {
+        let r = null;
+        for (const m of messages) {
+          if (m.at - TRACE_TOLERANCE_MS <= ts) r = m;
+          else break;
+        }
+        return r;
+      };
+      const rounds = new Map();
+      for (const q of inPhase) {
+        const m = roundOf(Date.parse(q.ts));
+        const key = m ? m.id : "before-first-message";
+        rounds.set(key, (rounds.get(key) || 0) + 1);
+      }
+      const fanouts = ctx.events.filter((e) => e.event === "research.fanout");
+      const problems = [];
+      if (rounds.size > max) problems.push(`${inPhase.length} searches spread over ${rounds.size} assistant turns (max ${max}): ${[...rounds.values()].join("+")} per turn`);
+      if (require_fanout && !fanouts.length) problems.push("no research.fanout event (the three angles were not fanned out)");
+      const summary = `${inPhase.length} searches in ${rounds.size} assistant turn(s) during the first research phase${note}; ${fanouts.length ? `fanout angles=[${(fanouts[0].data.angles || []).join(", ")}]` : "no research.fanout"}`;
+      return { pass: problems.length === 0, detail: problems.length ? `${problems.join(" | ")}; ${summary}` : summary };
+    },
+  },
+
   profile_written: {
     describe: "learner memory: learner.md at the KB root and <slug>/progress.md both exist with a dated entry and a memory.write event; a seeded file must have changed; a brand-new learner.md is announced to the learner",
     run(ctx) {

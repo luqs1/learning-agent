@@ -30,16 +30,29 @@ export function loadKb(kbRoot, preferredSlug) {
     }
   }
   // progress.md is learner memory, not research; it is never a concept file.
+  // Only top-level *.md files are read, so subdirectories (`.research/`
+  // fragments, `companies/` entity files) are never concept files either.
   const conceptFiles = Object.keys(files).filter((f) => !NON_CONCEPT_FILES.has(f)).sort();
   const sources = files["sources.md"] ? parseSourcesTable(files["sources.md"]) : null;
   const learnerFile = path.join(kbRoot, "learner.md");
   const learner = fs.existsSync(learnerFile) ? fs.readFileSync(learnerFile, "utf8") : null;
   const progress = files["progress.md"] ?? null;
-  return { root: kbRoot, topicDirs, slug, topicDir, files, conceptFiles, sources, learner, progress, traces: loadTraces(kbRoot) };
+  // Parallel research (#7): per-angle fragments the researchers wrote before
+  // the merge. Kept for the report and for assertions; never cited, never concept files.
+  const fragments = {};
+  const fragmentsDir = topicDir ? path.join(topicDir, FRAGMENTS_DIR) : null;
+  if (fragmentsDir && fs.existsSync(fragmentsDir)) {
+    for (const f of fs.readdirSync(fragmentsDir)) {
+      if (f.endsWith(".md")) fragments[`${FRAGMENTS_DIR}/${f}`] = fs.readFileSync(path.join(fragmentsDir, f), "utf8");
+    }
+  }
+  return { root: kbRoot, topicDirs, slug, topicDir, files, conceptFiles, sources, learner, progress, fragments, traces: loadTraces(kbRoot) };
 }
 
 /** Files in a topic folder that are not research concept files. */
 export const NON_CONCEPT_FILES = new Set(["sources.md", "progress.md"]);
+/** Subdirectory of a topic folder holding the per-angle research fragments (parallel research). */
+export const FRAGMENTS_DIR = ".research";
 
 export function loadTraces(kbRoot) {
   const dir = path.join(kbRoot, ".traces");
