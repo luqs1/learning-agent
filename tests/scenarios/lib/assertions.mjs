@@ -53,6 +53,19 @@ export const ASSERTIONS = {
     },
   },
 
+  no_trace_narration: {
+    describe: "the agent never mentions tracing or the trace file to the learner (tracing is silent bookkeeping)",
+    run(ctx) {
+      const hits = [];
+      ctx.turns.forEach((t, i) => {
+        const text = t.agent.text.replace(/```[\s\S]*?```/g, "");
+        const m = text.match(/\b(trace|tracing|trace file|jsonl|session log)\b/i);
+        if (m) hits.push(`turn ${i + 1}: "${text.slice(Math.max(0, m.index - 40), m.index + 40).replace(/\s+/g, " ")}"`);
+      });
+      return { pass: hits.length === 0, detail: hits.join(" | ") || "no tracing talk in any turn" };
+    },
+  },
+
   probe_first: {
     describe: "the first agent turn asks a probing question and does not explain (no citations, few paragraphs)",
     run(ctx, { max_paragraphs = 4 } = {}) {
@@ -268,4 +281,4 @@ FAIL if self-reported company claims are presented with the same authority as in
 };
 
 // Applied to every scenario, in this order.
-export const CORE_ASSERTIONS = ["trace_written", "probe_first", "gate_before_claim", "claims_cited", "citations_resolve", "sources_credibility", "max_paragraphs_without_question", "wrong_answer_corrected"];
+export const CORE_ASSERTIONS = ["trace_written", "no_trace_narration", "probe_first", "gate_before_claim", "claims_cited", "citations_resolve", "sources_credibility", "max_paragraphs_without_question", "wrong_answer_corrected"];

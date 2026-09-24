@@ -136,6 +136,14 @@ test("assertions: a well-formed synthetic run passes every deterministic core as
   assert.ok((await ASSERTIONS.contested_populated.run(ctx, {})).pass);
 });
 
+test("assertions: no_trace_narration fails when the agent talks about the trace", () => {
+  const ctx = syntheticCtx();
+  ctx.turns[0].agent.text = "Good, the trace is set up. What is your mental model?";
+  const r = ASSERTIONS.no_trace_narration.run(ctx, {});
+  assert.equal(r.pass, false);
+  assert.match(r.detail, /turn 1/);
+});
+
 test("assertions: probe_first fails when the first turn explains instead of asking", () => {
   const ctx = syntheticCtx();
   ctx.turns[0].agent.text = "A hash table maps keys to slots [source: hash-collisions.md]. It is fast.";

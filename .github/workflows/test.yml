@@ -1,0 +1,74 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "Only run fixtures whose path contains this string (empty = all)"
+        required: false
+        default: ""
+      model:
+        description: "Model for the agent under test"
+        required: false
+        default: "sonnet"
+  schedule:
+    # Nightly, 03:17 UTC. Costs tokens; gated on ANTHROPIC_API_KEY below.
+    - cron: "17 3 * * *"
+
+jobs:
+  lint:
+    name: lint (no model calls)
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Optional: lets the `claude plugin validate` lint test run instead of skipping.
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+      - run: npm test
+
+  scenarios:
+    name: scenarios (model-driven)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Check for API key
+        id: key
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANTHROPIC_API_KEY secret is not set; scenario tests skipped"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.present == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          node-version: 24
+      - name: Install Claude Code CLI
+        if: steps.key.outputs.present == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Lint first
+        if: steps.key.outputs.present == 'true'
+        run: npm test
+      - name: Run scenarios
+        if: steps.key.outputs.present == 'true'
+        run: npm run test:scenarios -- --model "${{ inputs.model || 'sonnet' }}" ${{ inputs.filter && format('--only {0}', inputs.filter) || '' }}
+      - name: Upload reports, traces and knowledge bases
+        if: always() && steps.key.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-runs
+          path: tests/scenarios/.runs/
+          if-no-files-found: ignore
