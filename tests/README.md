@@ -42,6 +42,21 @@ and a working login or `ANTHROPIC_API_KEY`.
   derivation of the Claude copy; every script's `--help` exits 0; every keyed
   script exits 2 naming its keyless fallback when the key is unset; scripts
   follow the conventions in AGENTS.md. No network calls.
+- **Researcher subagent and fan-out** (`researcher.test.mjs`) - the
+  `learning-researcher` agent exists in both trees with valid frontmatter
+  (Claude: `tools` limited to Bash/Read/Write/WebSearch/WebFetch plus the
+  Exa/context7 MCP patterns, `skills` preloading `learning-research`;
+  opencode: flat `mode: subagent`), the prompt is a one-angle worker that
+  writes `.research/` fragments and never launches subagents, the opencode
+  plugin registers it with `permission.task: deny`, the research skill
+  launches it by both platform identifiers, and `fanout.sh` exists, is
+  executable, `--help` exits 0, runs commands concurrently, prints one JSON
+  object per command in input order, reports exit codes (124 timeout, 127
+  missing), reads stdin, and staggers same-host calls. The two researcher
+  prompts are parity-checked like the main agent. The research-skill lint
+  also checks the fan-out section (all independent calls in one message, the
+  staggered providers named, a worked example with 5+ parallel tool calls,
+  the researcher brief) and the explicit merge rules.
 - **Manifests** - `package.json`, `claude/.claude-plugin/plugin.json` and
   `.claude-plugin/marketplace.json` carry the same version and name;
   `claude plugin validate ./claude` passes (skipped if the CLI is absent).
@@ -88,8 +103,9 @@ own events to the same file.
 | event | emitted by | data |
 |---|---|---|
 | `session.start` | agent, once, first thing | `topic`, `slug` |
-| `phase` | agent, on every flow transition | `from`, `to` (`probe`, `research`, `teach`, `check`, `recall`, `apply`, `challenge`, `synthesis`) |
+| `phase` | agent, on every flow transition | `from`, `to` (`probe`, `research`, `merge`, `teach`, `check`, `recall`, `apply`, `challenge`, `synthesis`) |
 | `gate.check` | `learning-assessment`, every run | `concept`, `result` (`pass`/`fail`), `reason` |
+| `research.fanout` | `learning-research`, once per fresh concept, just before the three angles are launched in parallel (researcher subagents, or a multi-call fan-out) | `angles` (array), `parallel` (bool). The researchers then write their own `research.query` / `research.fetch` / `kb.write` into the same file; the parent emits `phase research -> merge` and `merge -> teach` around the merge |
 | `research.query` | `learning-research`, every search | `provider` (the script or tool actually called: `arxiv.sh`, `hn.sh`, `WebSearch`, `mcp__exa__web_search_exa`, ...), `query`, `material_type` (`docs`/`paper`/`blog`/`talk`/`dataset`/`news`/`other`) |
 | `research.fetch` | `learning-research`, every fetch | `url`, `ok` (bool) |
 | `kb.write` | `learning-research`, every KB file written | `file` |
@@ -133,7 +149,9 @@ gate); `check.verdict: wrong -> advance` (advanced past a misunderstanding);
 reading); a session with `teach` events but no `check.ask` (lecturing); a
 `memory.read` with `found: true` followed by a `teach` before any `check.ask`
 (the profile stood in for the gauging question); a session with no
-`memory.write` before `session.end` (nothing remembered).
+`memory.write` before `session.end` (nothing remembered); a fresh topic with
+no `research.fanout`, or `research.query` events whose timestamps are spread
+seconds apart in a chain (one search per turn instead of a fan-out).
 
 ## 3. Scenario tests (`npm run test:scenarios`)
 
@@ -192,7 +210,9 @@ Each run writes `tests/scenarios/.runs/<stamp>/`:
 ```
 summary.md                       pass/fail table with links to every report and trace
 <domain>/<name>/report.md        assertions, judge reasoning, trace timeline, KB file list, transcript
-<domain>/<name>/turns.json       raw per-turn data: text blocks, tool calls, timings, cost
+<domain>/<name>/turns.json       raw per-turn data: text blocks, tool calls, timings, cost,
+                                 `messages` (one per assistant API turn: id, timestamp, tools,
+                                 `parent` for subagent turns) and `subagents` launched
 <domain>/<name>/kb/              the knowledge base the agent built (LEARNING_KB_ROOT),
                                  plus any `seed:` files and the learner.md / progress.md it wrote
 <domain>/<name>/kb/.traces/      the session trace
@@ -278,6 +298,7 @@ its content changed during the run.
 | `numeric_claims_cited` | regex + files | market research: every sentence with a market/funding/user-count number carries a citation whose file is backed by a High/Medium **dated** `sources.md` row |
 | `no_paywalled_as_fact` | **judge** | market research: paywalled analyst figures (Gartner, Statista, Grand View, ...) are flagged as unverified, never stated as fact |
 | `first_vs_third_party` | **judge** | market research: company self-reports are marked as such, distinct from independent evidence |
+| `research_rounds_max` | trace + `turns.json` timings | parallel research: the `research.query` events of the **first** research phase (from `phase -> research` to the next phase change) fall in at most `max` (default 2) distinct **top-level** assistant turns - subagent turns (`parent` set) never count, so three researchers launched from one message are one round; a `research.fanout` event must exist (`require_fanout: false` waives it). A trace line belongs to the last assistant message that started before it. Runs without message timings are skipped, not failed |
 | `profile_written` | files + trace + regex | learner memory: `<kb>/learner.md` (with the `# Learner profile` heading) and `<kb>/<slug>/progress.md` exist with a `YYYY-MM-DD` entry, each has a `memory.write` event; a seeded file must differ from its seed; when `learner.md` was not seeded, some agent turn mentions `learner.md` (the one-time "this file exists and is yours" notice) |
 | `profile_not_trusted` | **judge** + trace + regex | learner memory: needs a seeded `learner.md`; a `memory.read` with `found: true` for it; a question in the first turn; then the judge checks the agent opened by asking rather than teaching at the claimed level, corrected and down-shifted after every `expect: correction` turn, and never treated the profile's claim as settled |
 
@@ -317,14 +338,21 @@ relative to what the learner saw.
   agent prompts (the lint checks both trees list the same vocabulary) and in
   the table above. `trace-summary` prints unknown events generically, so
   nothing breaks in between.
-- **Search providers (#6) / parallel research (#7):** the research skill
-  emits `research.query` with the real `provider` (script or tool name) and
-  `research.fetch` per source; the existing assertions only care that a
+- **Search providers (#6) / parallel research (#7, done):** the research
+  skill emits `research.query` with the real `provider` (script or tool name)
+  and `research.fetch` per source; the existing assertions only care that a
   `gate.check` precedes teaching and that the files are cited and rated. A
   new provider = a new script under `claude/skills/learning-research/scripts/`
   plus a row in the routing table; `research-skill.test.mjs` checks both
   halves exist, that `--help` works and that a missing key degrades. A
-  parallel step can fan the scripts out as-is (they are `mktemp`-only).
+  rate-limited provider also needs a row in `fanout.sh`'s `HOSTS` table so
+  the fan-out staggers it. A fresh concept is researched by three
+  `learning-researcher` subagents launched in one message (or a multi-call
+  fan-out where no subagent tool exists); they write `.research/` fragments
+  (`kb.fragments`), the parent merges, and `research_rounds_max` pins the
+  number of assistant turns that contain searches. The driver records every
+  assistant API turn in `turns.json` (`messages`), keeps subagent text out of
+  the learner-visible transcript, and lists launched `subagents`.
 - **Learner memory (#8, done):** `learner.md` lives at the KB root and
   `progress.md` in the topic folder, both under `LEARNING_KB_ROOT`; the agent
   emits `memory.read` / `memory.write` for them. `loadKb` exposes them as

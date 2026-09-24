@@ -56,9 +56,9 @@ Topic introduced
 
 The agent never states a non-trivial fact without first verifying it against a persistent knowledge base. When it encounters a topic or concept it hasn't researched yet, it:
 
-1. **Searches** from three angles — technical accuracy, expert/practitioner perspective, and contested or uncertain areas
-2. **Fetches and reads** primary sources (official docs, papers, practitioner blog posts — not summaries)
-3. **Stores** the research as structured markdown files, one per concept, with citations
+1. **Searches** from three angles **in parallel** — technical accuracy, expert/practitioner perspective, and contested or uncertain areas. In Claude Code each angle is a `learning-researcher` subagent launched in the same message; in opencode the same worker runs through the `task` tool. Independent searches go out together, so a fresh topic takes a couple of round-trips instead of one search per turn.
+2. **Fetches and reads** primary sources (official docs, papers, practitioner blog posts — not summaries); every source is read in full before it is cited, however many were fetched at once
+3. **Merges and stores** the research as structured markdown files, one per concept, with citations: sources are de-duplicated by URL, the highest evidence tier wins, and anything the angles disagree on is recorded under *Contested* rather than taught as settled
 4. **Cites** every claim with `[source: filename.md]`
 
 Research persists across sessions. If you come back to a topic later, the agent reads what it already has and only researches what's new.

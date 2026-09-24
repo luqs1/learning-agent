@@ -27,11 +27,20 @@ Three cooperating parts plus a slash command:
   helper scripts for 20+ free search APIs, rules for reading each material type
   in full, an adjacent-material step, and the knowledge-base schema (evidence
   tiers, market-research layout).
+- **`learning-researcher` (subagent, not for direct use)** — a one-angle
+  research worker. For a fresh concept the research skill launches three of
+  them in **one message** (technical, expert, contested — or market-research
+  sub-questions); each runs the routing table for its angle, reads its sources
+  in full, and writes `<topic>/.research/<concept>-<angle>.md` plus a
+  per-angle sources fragment. The Learning agent then **merges**: dedupe by
+  normalised URL, highest tier wins, disagreements between angles go to
+  *Contested*. `scripts/fanout.sh` runs several helper scripts concurrently
+  with per-host staggering for the rate-limited providers.
 - **`learn` (slash command, Claude Code only)** — forks a learning session on a
   given topic.
 
-Runtime flow: **assessment gate → research if it fails → teach with
-`[source: filename.md]` citations.**
+Runtime flow: **assessment gate → research if it fails (fan out three angles →
+merge) → teach with `[source: filename.md]` citations.**
 
 ## Repository layout
 
@@ -47,7 +56,9 @@ Runtime flow: **assessment gate → research if it fails → teach with
 │
 ├── claude/                           # ── CLAUDE CODE plugin ──
 │   ├── .claude-plugin/plugin.json
-│   ├── agents/learning.md            # agent prompt (Claude flavour)
+│   ├── agents/
+│   │   ├── learning.md               # agent prompt (Claude flavour)
+│   │   └── learning-researcher.md    # one-angle research subagent (tools restricted, skill preloaded)
 │   └── skills/
 │       ├── learn/SKILL.md            # slash command (Claude only)
 │       ├── learning-assessment/SKILL.md
@@ -55,6 +66,7 @@ Runtime flow: **assessment gate → research if it fails → teach with
 │           ├── SKILL.md
 │           └── scripts/              # provider helper scripts (bash + curl + jq/python3)
 │               ├── _lib.sh           # shared: http retries, JSON helpers, mktemp, exit codes
+│               ├── fanout.sh         # run N script calls concurrently, per-host cap + stagger
 │               ├── arxiv.sh, s2.sh, openalex.sh, pubmed.sh, crossref.sh      # papers
 │               ├── wikimedia-images.sh, openverse.sh                          # images
 │               ├── yt-search.sh, yt-transcript.sh                             # video
@@ -64,9 +76,11 @@ Runtime flow: **assessment gate → research if it fails → teach with
 │               └── fetch-readable.sh                                          # URL → readable text
 │
 ├── .opencode/
-│   └── plugins/learning-agent.js     # registers the opencode agent + skills at runtime
+│   └── plugins/learning-agent.js     # registers the opencode agents + skills at runtime
 ├── opencode/                         # ── OPENCODE plugin assets ──
-│   ├── agents/learning.md            # agent prompt (opencode flavour)
+│   ├── agents/
+│   │   ├── learning.md               # agent prompt (opencode flavour)
+│   │   └── learning-researcher.md    # derived from the Claude copy (scripts/sync-opencode.sh)
 │   └── skills/
 │       ├── learning-assessment/SKILL.md
 │       └── learning-research/
@@ -74,6 +88,7 @@ Runtime flow: **assessment gate → research if it fails → teach with
 │           └── scripts → ../../../claude/skills/learning-research/scripts   # relative symlink
 │
 ├── scripts/trace-summary.mjs         # prints a session trace as a timeline (npm run trace)
+├── scripts/sync-opencode.sh          # regenerates the derived opencode copies (npm run sync:opencode)
 ├── tests/                            # see tests/README.md
 │   ├── lint/                         # deterministic checks, no model (npm test)
 │   ├── lib/                          # shared helpers: frontmatter, yaml subset, repo paths
@@ -98,6 +113,13 @@ other. The **only intended differences** between the copies are:
    - opencode agent (`opencode/agents/learning.md`): `description`, `mode`,
      `color` — skills are registered programmatically by
      `.opencode/plugins/learning-agent.js`, not via frontmatter.
+   - Claude researcher (`claude/agents/learning-researcher.md`): `name`,
+     `description`, `tools` (Bash, Read, Write, WebSearch, WebFetch, the Exa
+     and context7 MCP patterns — no Agent, no Edit) and `skills:` preloading
+     `learning-research`; opencode researcher: `description`,
+     `mode: subagent`, `color`, with the tool restriction applied by the
+     plugin JS (`permission: { task: "deny" }`) and the skill loaded through
+     opencode's `skill` tool (the prompt says so).
    - Claude skills carry `user-invocable: false` (and `learning-research` also
      `allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/*)` so its scripts run
      without permission prompts); opencode skills carry neither, because
@@ -107,20 +129,40 @@ other. The **only intended differences** between the copies are:
    - Claude Code → `${CLAUDE_SKILL_DIR}/scripts/<name>.sh`
    - opencode    → `scripts/<name>.sh`
    (see [Bundled scripts and path resolution](#bundled-scripts-and-path-resolution)).
+4. **How the parallel research fan-out is launched** (the prompt text is
+   identical; the platform mechanism differs):
+   - Claude Code → the `Agent` tool with
+     `subagent_type: "learning-agent:learning-researcher"` (plugin agents are
+     addressed as `<plugin>:<agent>`); three calls in one assistant message
+     run **concurrently** (verified with `claude -p --output-format
+     stream-json`: subagent events carry `parent_tool_use_id`, and two
+     8-second subagents launched from one message overlapped).
+   - opencode → the `task` tool with `subagent_type: "learning-researcher"`,
+     registered by the plugin JS with `mode: subagent`. opencode's task tool
+     starts each call as its own background job, so three calls in one message
+     also run concurrently, but that is opencode's behaviour, not something
+     this plugin controls; the skill's **multi-call fan-out** (all searches as
+     parallel tool calls in one message, scripts bundled through `fanout.sh`)
+     is the documented fallback on either platform when no subagent tool is
+     available, and is what a researcher uses inside its own angle.
 
 The `learn` slash command lives **only** under `claude/` (opencode has no
-slash-command equivalent here). Everything else should match. The opencode copy
-of `learning-research/SKILL.md` is derived mechanically from the Claude copy:
+slash-command equivalent here). Everything else should match. Two opencode
+files are derived mechanically from their Claude copies by
+`scripts/sync-opencode.sh` (`npm run sync:opencode`):
 
 ```bash
+# opencode/skills/learning-research/SKILL.md
 sed -e '/^user-invocable: false$/d' -e '/^allowed-tools: /d' \
     -e 's#~/.claude/learning/#~/.config/opencode/learning/#g' \
     -e 's#\${CLAUDE_SKILL_DIR}/scripts#scripts#g' \
     claude/skills/learning-research/SKILL.md > opencode/skills/learning-research/SKILL.md
+# opencode/agents/learning-researcher.md: description / mode: subagent / color
+# frontmatter, then the Claude body with the KB path swapped (see the script).
 ```
 
-Edit the Claude copy, re-run that, and commit both. `npm test` (the parity
-lint) applies the same normalisation and fails on any other drift.
+Edit the Claude copy, run the sync script, and commit both. `npm test` (the
+parity lint) applies the same normalisation and fails on any other drift.
 
 ## Bundled scripts and path resolution
 
@@ -156,7 +198,12 @@ Script conventions (enforce them in any new script):
   failure, `2` when a required API key is unset — and the exit-2 message must
   name the keyless fallback. Zero keys must still work end to end.
 - Temp files only via `mktemp` under `$LA_TMP` (cleaned on exit), so scripts
-  can be run concurrently by a parallel research step.
+  can be run concurrently by a parallel research step. `fanout.sh` is that
+  step's runner: it takes one command per argument (or per stdin line), runs
+  them concurrently with a per-host cap (default 1) and a per-host minimum
+  gap (arXiv 3 s, GDELT 5 s, Reddit 2 s, Wayback 1 s, Semantic Scholar 1 s,
+  SEC 0.1 s), and prints one JSON object per command. A new rate-limited
+  provider needs a row in its `HOSTS` table.
 - Test against the live API before committing; paste a real output line in
   the PR.
 
@@ -182,6 +229,13 @@ When bumping the version, update it in all three manifests:
 - One concept (or entity) per file; split files that exceed ~200 lines.
 - On returning to an existing topic, **read what's there before researching** —
   only fill gaps, don't re-research.
+- **Research fragments** — `<topic-slug>/.research/<concept-slug>-<angle>.md`
+  and `.research/sources-<angle>.md` are what the parallel researchers wrote
+  before the merge. They are kept as the audit trail, never cited, and never
+  concept files (`loadKb` exposes them as `kb.fragments`). Merge rules
+  (normalised-URL dedupe, highest tier wins, disagreements to *Contested*,
+  a neighbour found twice stored once) are in the research skill under
+  "Merging angle fragments".
 - **Learner memory** lives beside the research: `<kb-root>/learner.md` (one
   global profile: background, goals, explanation styles, strengths,
   misconceptions, pace, topics studied, venture context) and
@@ -210,8 +264,9 @@ Full details in [tests/README.md](./tests/README.md). The short version:
   differences above, mismatched manifest versions, a shared skill that is not
   `user-invocable: false`, a `[source: ...]` example in the wrong format, any
   wording that permits skipping the probing question, a missing trace event in
-  either tree, or a broken scenario fixture. Run it before every commit that
-  touches a prompt or skill. CI runs it on every PR.
+  either tree, a researcher subagent missing from either tree or registered
+  wrongly, a broken `fanout.sh`, or a broken scenario fixture. Run it before
+  every commit that touches a prompt or skill. CI runs it on every PR.
 - **`npm run test:scenarios`** — drives the real agent (`claude -p`) through
   scripted learner sessions and checks the transcript, the knowledge base and
   the trace: gate before the first claim, citations resolve to real files,
@@ -229,11 +284,14 @@ Full details in [tests/README.md](./tests/README.md). The short version:
 - **Reading a trace** — every session writes
   `<kb-root>/.traces/<topic-slug>/<timestamp>.jsonl`, one `{ts, event, data}`
   per line (`session.start`, `memory.read`, `phase`, `gate.check`,
-  `research.query`, `research.fetch`, `kb.write`, `teach`, `check.ask`,
-  `check.verdict`, `memory.write`, `session.end`). `npm run trace` prints the
-  latest one as a timeline; a `teach` with no preceding `gate.check`, or a
-  `check.verdict` of `wrong -> advance`, is a regression. Set `LEARNING_KB_ROOT` to point the
-  agent (and its traces) at a different root; the test harness does this.
+  `research.fanout`, `research.query`, `research.fetch`, `kb.write`, `teach`,
+  `check.ask`, `check.verdict`, `memory.write`, `session.end`). `npm run trace`
+  prints the latest one as a timeline; a `teach` with no preceding
+  `gate.check`, or a `check.verdict` of `wrong -> advance`, is a regression,
+  and so are `research.query` events spread over many assistant turns for a
+  fresh topic (the `research_rounds_max` assertion counts them). Set
+  `LEARNING_KB_ROOT` to point the agent (and its traces) at a different root;
+  the test harness does this.
 - When you add a trace event or change the `sources.md` layout, update **both**
   agent prompts / skills and the tables in `tests/README.md`; the lint checks
   the trees agree.
