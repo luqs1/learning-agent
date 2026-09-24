@@ -4,15 +4,20 @@
 //   2. the agent frontmatter keys (claude: name/description/skills; opencode: description/mode/color)
 //   3. the `learn` slash command, which exists only under claude/
 //   4. `user-invocable: false`, which only the claude skill copies carry
+//   5. `allowed-tools`, which only the claude learning-research copy carries
+//      (it pre-approves its bundled scripts; opencode has no equivalent key)
+//   6. bundled-script paths: claude writes `${CLAUDE_SKILL_DIR}/scripts/x.sh`
+//      (substituted by Claude Code), opencode writes `scripts/x.sh` (relative
+//      to the base directory its skill tool prints)
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PLATFORMS, MIRRORED, PLATFORM_ONLY, listFiles, read } from "../lib/repo.mjs";
+import { PLATFORMS, MIRRORED, PLATFORM_ONLY, SKILL_SCRIPTS_PREFIX, listFiles, read } from "../lib/repo.mjs";
 import { parseFrontmatter } from "../lib/frontmatter.mjs";
 
 const KB_TOKEN = "<KB-ROOT>";
 
 function normaliseBody(text, kbPath) {
-  return text.split(kbPath).join(KB_TOKEN);
+  return text.split(kbPath).join(KB_TOKEN).split(SKILL_SCRIPTS_PREFIX).join("scripts");
 }
 
 function firstDiff(a, b) {
@@ -36,13 +41,14 @@ for (const [claudeFile, opencodeFile] of MIRRORED) {
     // Neither tree may contain the other platform's KB path.
     assert.ok(!c.body.includes(PLATFORMS.opencode.kbPath), `${claudeFile} mentions the opencode KB path`);
     assert.ok(!o.body.includes(PLATFORMS.claude.kbPath), `${opencodeFile} mentions the claude KB path`);
+    assert.ok(!o.body.includes(SKILL_SCRIPTS_PREFIX), `${opencodeFile} uses the Claude-only ${SKILL_SCRIPTS_PREFIX} prefix (opencode does not substitute it)`);
   });
 
   test(`parity: ${claudeFile} frontmatter differs from ${opencodeFile} only in the allowed keys`, () => {
     const c = parseFrontmatter(read(claudeFile)).frontmatter;
     const o = parseFrontmatter(read(opencodeFile)).frontmatter;
     const isAgent = claudeFile.endsWith("agents/learning.md");
-    const allowedOnlyClaude = isAgent ? new Set(["name", "skills"]) : new Set(["user-invocable"]);
+    const allowedOnlyClaude = isAgent ? new Set(["name", "skills"]) : new Set(["user-invocable", "allowed-tools"]);
     const allowedOnlyOpencode = isAgent ? new Set(["mode", "color"]) : new Set();
     for (const k of Object.keys(c)) {
       if (!(k in o)) assert.ok(allowedOnlyClaude.has(k), `key '${k}' exists only in ${claudeFile}`);

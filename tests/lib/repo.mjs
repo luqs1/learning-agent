@@ -40,6 +40,14 @@ export const PLATFORM_ONLY = {
 
 export const SHARED_SKILLS = ["learning-assessment", "learning-research"];
 
+// The learning-research helper scripts live once, under claude/; the opencode
+// tree reaches them through a relative symlink. The Claude copy of SKILL.md
+// prefixes every script path with this variable (Claude Code substitutes it);
+// the opencode copy uses bare `scripts/`.
+export const RESEARCH_SKILL = "claude/skills/learning-research/SKILL.md";
+export const RESEARCH_SCRIPTS_DIR = "claude/skills/learning-research/scripts";
+export const SKILL_SCRIPTS_PREFIX = "${CLAUDE_SKILL_DIR}/scripts";
+
 export const MANIFESTS = ["package.json", "claude/.claude-plugin/plugin.json", ".claude-plugin/marketplace.json"];
 
 export const PROMPT_FILES = [
@@ -65,7 +73,10 @@ export function listFiles(relDir) {
   const walk = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
-      if (e.isDirectory()) walk(p);
+      // Follow symlinked directories (opencode/skills/learning-research/scripts
+      // -> claude/.../scripts) so both trees list the same script files.
+      const isDir = e.isDirectory() || (e.isSymbolicLink() && fs.statSync(p).isDirectory());
+      if (isDir) walk(p);
       else out.push(path.relative(ROOT, p));
     }
   };
