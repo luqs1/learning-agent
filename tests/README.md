@@ -51,7 +51,10 @@ and a working login or `ANTHROPIC_API_KEY`.
   concept-file template); no line permits skipping the probing question; the
   probing-question rule, citation rule, iron law and three research angles
   are still present; both trees document the full trace vocabulary and honour
-  `LEARNING_KB_ROOT`.
+  `LEARNING_KB_ROOT`; no line lets memory (`learner.md`, the profile) replace
+  or skip the gauging question, and the agent prompt defines learner memory
+  (paths, templates, update points), the pacing controls and the
+  one-concept-per-turn rule.
 - **Harness self-tests** - the YAML-subset parser, the frontmatter parser,
   the trace parser, every scenario fixture (it must load and validate), the
   driver's CLI arguments, and each deterministic assertion against a
@@ -93,6 +96,8 @@ own events to the same file.
 | `teach` | agent, before each teaching message | `concept`, `citations` (array of `file.md`) |
 | `check.ask` | agent, every question it will evaluate | `concept`, `question` |
 | `check.verdict` | agent, on evaluating an answer | `concept`, `verdict` (`correct`/`partial`/`wrong`), `action` (`advance`/`correct`/`reteach`) |
+| `memory.read` | agent, at session open, once for `learner.md` and once for `<slug>/progress.md` | `file`, `found` (bool) |
+| `memory.write` | agent, after each synthesis checkpoint and at session end, per file updated | `file` |
 | `session.end` | agent, at wrap-up | `concepts_covered` |
 
 Values are short strings (under 200 chars), double quotes only, no
@@ -125,7 +130,10 @@ Things to look for: a `teach` with no earlier `gate.check` (gate skipped); a
 `gate.check` with `result: pass` on a brand-new topic (rationalised past the
 gate); `check.verdict: wrong -> advance` (advanced past a misunderstanding);
 `research.fetch` with `ok: false` followed by `kb.write` (stored without
-reading); a session with `teach` events but no `check.ask` (lecturing).
+reading); a session with `teach` events but no `check.ask` (lecturing); a
+`memory.read` with `found: true` followed by a `teach` before any `check.ask`
+(the profile stood in for the gauging question); a session with no
+`memory.write` before `session.end` (nothing remembered).
 
 ## 3. Scenario tests (`npm run test:scenarios`)
 
@@ -155,13 +163,14 @@ claude -p --plugin-dir ./claude --agent learning-agent:learning \
 ```
 
 with `LEARNING_KB_ROOT=<run-dir>/kb` in the environment. Both prompts honour
-that variable, and the harness note restates the resolved paths and the topic
-slug, so runs never touch `~/.claude/learning`.
+that variable, and the harness note restates the resolved paths (topic folder,
+`learner.md`, `progress.md`, trace) and the topic slug, so runs never touch
+`~/.claude/learning`.
 
 ### Running
 
 ```bash
-npm run test:scenarios                          # all fixtures (8 x ~4 turns; budget a few dollars each)
+npm run test:scenarios                          # all fixtures (10 x ~4 turns; budget a few dollars each)
 npm run test:scenarios -- --domain medicine     # one domain
 npm run test:scenarios -- --only hash-tables    # fixtures whose path contains the string
 npm run test:scenarios -- --dry-run             # validate fixtures, print the plan, no model calls
@@ -184,7 +193,8 @@ Each run writes `tests/scenarios/.runs/<stamp>/`:
 summary.md                       pass/fail table with links to every report and trace
 <domain>/<name>/report.md        assertions, judge reasoning, trace timeline, KB file list, transcript
 <domain>/<name>/turns.json       raw per-turn data: text blocks, tool calls, timings, cost
-<domain>/<name>/kb/              the knowledge base the agent built (LEARNING_KB_ROOT)
+<domain>/<name>/kb/              the knowledge base the agent built (LEARNING_KB_ROOT),
+                                 plus any `seed:` files and the learner.md / progress.md it wrote
 <domain>/<name>/kb/.traces/      the session trace
 ```
 
@@ -212,6 +222,13 @@ assertions:                         # extras on top of the core set (see below)
   - contested_populated
   - name: max_paragraphs_without_question
     n: 3
+seed:                               # optional: files written under the KB root before turn 1
+  learner.md: |                     # (simulates a returning learner; see "Seeding memory")
+    # Learner profile
+    ...
+  hash-tables/progress.md: |
+    # Progress: hash tables
+    ...
 # optional: model, judge_model, budget_usd, max_paragraphs
 ```
 
@@ -221,8 +238,20 @@ answering a specific phrasing. The wrong turn should assert the misconception
 plainly so the agent has something concrete to correct.
 
 The YAML parser is a small subset (`tests/lib/yaml.mjs`): maps, lists, block
-scalars `|`/`>`, flow lists `[a, b]`, quoted strings, comments. Anything
-fancier fails loudly with a line number.
+scalars `|`/`>`, flow lists `[a, b]`, quoted strings, comments; mapping keys
+may contain `/` so seed paths can name a topic folder. Anything fancier fails
+loudly with a line number.
+
+#### Seeding memory (returning-learner scenarios)
+
+`seed:` is a map of *relative path under the KB root* to file content. The
+runner writes each file into `LEARNING_KB_ROOT` before the first turn, so the
+agent finds it exactly as it would find a real learner's files. Paths must be
+relative (no `..`, no leading `/`); by convention only `learner.md` and
+`<slug>/progress.md` are seeded (the lint enforces this), because seeding
+research files would let a scenario pass the gate with content the agent
+never verified. `profile_written` treats a seeded file as "written" only if
+its content changed during the run.
 
 ### Assertions
 
@@ -249,6 +278,8 @@ fancier fails loudly with a line number.
 | `numeric_claims_cited` | regex + files | market research: every sentence with a market/funding/user-count number carries a citation whose file is backed by a High/Medium **dated** `sources.md` row |
 | `no_paywalled_as_fact` | **judge** | market research: paywalled analyst figures (Gartner, Statista, Grand View, ...) are flagged as unverified, never stated as fact |
 | `first_vs_third_party` | **judge** | market research: company self-reports are marked as such, distinct from independent evidence |
+| `profile_written` | files + trace + regex | learner memory: `<kb>/learner.md` (with the `# Learner profile` heading) and `<kb>/<slug>/progress.md` exist with a `YYYY-MM-DD` entry, each has a `memory.write` event; a seeded file must differ from its seed; when `learner.md` was not seeded, some agent turn mentions `learner.md` (the one-time "this file exists and is yours" notice) |
+| `profile_not_trusted` | **judge** + trace + regex | learner memory: needs a seeded `learner.md`; a `memory.read` with `found: true` for it; a question in the first turn; then the judge checks the agent opened by asking rather than teaching at the claimed level, corrected and down-shifted after every `expect: correction` turn, and never treated the profile's claim as settled |
 
 Judge assertions call `claude -p` with no tools, a tight rubric and a JSON
 schema (`pass`, `reasoning`, `evidence`); the reasoning and quoted evidence
@@ -294,9 +325,13 @@ relative to what the learner saw.
   plus a row in the routing table; `research-skill.test.mjs` checks both
   halves exist, that `--help` works and that a missing key degrades. A
   parallel step can fan the scripts out as-is (they are `mktemp`-only).
-- **Learner memory (#8):** a new KB file family should still live under
-  `<kb-root>/...` so `LEARNING_KB_ROOT` isolates it; add a `kb.write` for it
-  and, if it changes the first turn, adjust `probe_first` via a fixture param.
+- **Learner memory (#8, done):** `learner.md` lives at the KB root and
+  `progress.md` in the topic folder, both under `LEARNING_KB_ROOT`; the agent
+  emits `memory.read` / `memory.write` for them. `loadKb` exposes them as
+  `kb.learner` / `kb.progress` and never counts `progress.md` as a concept
+  file. Use `seed:` to simulate a returning learner. The first turn of a
+  returning learner is still a question (a targeted one), so `probe_first`
+  applies unchanged.
 - **Research mode (#9):** a mode that legitimately skips the probing question
   must not do so by editing the rule text (the lint pins it); give scenarios a
   fixture-level switch and a matching assertion instead.

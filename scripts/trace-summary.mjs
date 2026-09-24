@@ -100,6 +100,10 @@ function describe(e) {
       return `ask            ${d.concept}: ${d.question}`;
     case "check.verdict":
       return `verdict        ${d.concept}: ${d.verdict} -> ${d.action}`;
+    case "memory.read":
+      return `memory read    ${d.file} ${d.found ? "(found)" : "(absent)"}`;
+    case "memory.write":
+      return `memory write   ${d.file}`;
     default:
       return `${e.event.padEnd(14)} ${JSON.stringify(d)}`;
   }
@@ -117,6 +121,8 @@ export function summarise(events) {
     concepts_taught: [...new Set(events.filter((e) => e.event === "teach").map((e) => e.data.concept))],
     gate_fails: events.filter((e) => e.event === "gate.check" && e.data.result === "fail").length,
     files_written: [...new Set(events.filter((e) => e.event === "kb.write").map((e) => e.data.file))],
+    memory_read: events.filter((e) => e.event === "memory.read").map((e) => `${e.data.file}${e.data.found ? "" : " (absent)"}`),
+    memory_written: [...new Set(events.filter((e) => e.event === "memory.write").map((e) => e.data.file))],
   };
 }
 
@@ -142,6 +148,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (const err of errors) console.log(`  line ${err.line}: MALFORMED (${err.error}) ${err.raw.slice(0, 120)}`);
   const s = summarise(events);
   console.log("");
-  console.log(`Summary: ${s.events} events over ${s.duration_s ?? "?"}s; concepts taught: ${s.concepts_taught.join(", ") || "none"}; gate fails: ${s.gate_fails}; files written: ${s.files_written.length}`);
+  console.log(`Summary: ${s.events} events over ${s.duration_s ?? "?"}s; concepts taught: ${s.concepts_taught.join(", ") || "none"}; gate fails: ${s.gate_fails}; files written: ${s.files_written.length}; memory read: ${s.memory_read.join(", ") || "none"}; memory written: ${s.memory_written.join(", ") || "none"}`);
   console.log(`Counts: ${Object.entries(s.counts).map(([k, v]) => `${k}=${v}`).join("  ")}`);
 }

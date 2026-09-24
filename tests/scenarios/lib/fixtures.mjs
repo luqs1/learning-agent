@@ -17,6 +17,10 @@
 //                  note: <string>         free text for humans
 //   assertions:  list of extra assertions (string, or map with name + params)
 //                on top of the CORE set applied to every scenario.
+//   seed:        optional map of <relative path under the KB root> -> file
+//                content, written into LEARNING_KB_ROOT before the first turn
+//                (e.g. learner.md, <slug>/progress.md) to simulate a returning
+//                learner. Paths are relative, no `..`, no leading `/` or `.`.
 //   model, judge_model, max_paragraphs, budget_usd: optional overrides.
 
 import fs from "node:fs";
@@ -87,7 +91,33 @@ export function validateFixture(doc, file) {
   for (const key of ["max_paragraphs", "budget_usd"]) {
     if (doc[key] !== undefined && typeof doc[key] !== "number") errors.push(`${key} must be a number`);
   }
+  if (doc.seed !== undefined) errors.push(...validateSeed(doc.seed));
   return errors;
+}
+
+export const SEED_PATH_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*(\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$/;
+
+export function validateSeed(seed) {
+  if (!seed || typeof seed !== "object" || Array.isArray(seed)) return ["seed must be a map of <relative path> -> <file content>"];
+  const errors = [];
+  for (const [p, content] of Object.entries(seed)) {
+    if (!SEED_PATH_RE.test(p) || p.split("/").includes("..")) errors.push(`seed path '${p}' must be a relative path under the KB root (no '..', no leading '/' or '.')`);
+    if (typeof content !== "string" || !content.trim()) errors.push(`seed['${p}'] must be non-empty file content (use a | block scalar)`);
+  }
+  return errors;
+}
+
+/** Write a fixture's seed files under the run's KB root. Returns the paths written. */
+export function writeSeed(kbRoot, seed = {}) {
+  const written = [];
+  for (const [rel, content] of Object.entries(seed)) {
+    const target = path.join(kbRoot, rel);
+    if (!target.startsWith(path.resolve(kbRoot) + path.sep)) throw new Error(`seed path escapes the KB root: ${rel}`);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content);
+    written.push(rel);
+  }
+  return written;
 }
 
 function normalise(doc, file) {
@@ -110,6 +140,7 @@ function normalise(doc, file) {
     persona: doc.persona.trim(),
     turns,
     assertions,
+    seed: doc.seed || {},
     model: doc.model,
     judge_model: doc.judge_model,
     budget_usd: doc.budget_usd,

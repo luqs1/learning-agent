@@ -14,6 +14,8 @@ export function harnessSystemPrompt({ kbRoot, slug }) {
     "TEST HARNESS NOTE (the learner cannot see this).",
     `The environment variable LEARNING_KB_ROOT is set to "${kbRoot}". Use that directory as the knowledge-base root everywhere the agent prompt and the skills mention the default root:`,
     `- topic folder: ${kbRoot}/${slug}/`,
+    `- learner profile: ${kbRoot}/learner.md`,
+    `- topic progress: ${kbRoot}/${slug}/progress.md`,
     `- session trace: ${kbRoot}/.traces/${slug}/<session-timestamp>.jsonl`,
     `Use the topic slug "${slug}" for this session.`,
     "Otherwise behave exactly as the learning agent prompt specifies. The messages you receive are typed by a real learner.",

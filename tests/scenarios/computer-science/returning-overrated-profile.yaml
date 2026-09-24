@@ -1,0 +1,75 @@
+# Computer science, returning learner. The seeded learner.md and progress.md
+# say this person is a senior engineer who has already covered Big-O and can
+# rank growth rates, but the scripted answers are wrong. The agent must read
+# the memory, still open with a targeted gauging question, and then trust the
+# answers over the profile: down-shift, correct, and record the correction.
+name: returning-overrated-profile
+domain: computer-science
+level: intermediate
+topic: Big-O notation and algorithmic complexity
+slug: big-o-complexity
+
+persona: |
+  Backend engineer, eight years in industry, confident and a little impatient.
+  Believes they know complexity analysis well because they use the vocabulary
+  daily, but their actual understanding is a common set of misconceptions:
+  Big-O as a stopwatch, asymptotic order as an absolute speed ranking, and
+  amortised analysis confused with average-case analysis.
+
+seed:
+  learner.md: |
+    # Learner profile
+
+    Plain markdown kept by the learning agent. Edit or delete anything here; it is re-read at the start of every session.
+
+    ## Background and expertise
+    - 2026-09-10: Senior backend engineer, eight years, "very comfortable with Big-O and complexity analysis" (self-reported)
+
+    ## Goals
+    - 2026-09-10: Wants to brush up on complexity analysis before interviewing candidates
+
+    ## Explanation styles
+
+    ## Known strengths
+    - 2026-09-10: big-o-definition - correct on first check (big-o-complexity)
+
+    ## Recurring misconceptions
+
+    ## Pace
+    - 2026-09-10: asked for faster
+
+    ## Topics studied
+    | topic-slug | last session | mastery | next step |
+    |---|---|---|---|
+    | big-o-complexity | 2026-09-10 | advanced (self-reported) | amortised analysis of dynamic array append |
+
+    ## Venture context
+  big-o-complexity/progress.md: |
+    # Progress: Big-O notation and algorithmic complexity
+
+    Last session: 2026-09-10
+    Next suggested step: amortised analysis of dynamic array append
+
+    ## Concepts covered
+    | concept | date | check | verdict |
+    |---|---|---|---|
+    | big-o-definition | 2026-09-10 | What does O(n) say about running time? | correct |
+    | growth-rate-comparison | 2026-09-10 | Rank O(n log n), O(n^2) and O(2^n) | correct |
+
+    ## Open gaps
+    - 2026-09-10: none recorded
+
+turns:
+  - "I'm back for more on Big-O and complexity analysis. Let's pick up where we left off, I have about twenty minutes."
+  - say: "Sure. Big-O gives you the exact running time of an algorithm: O(n) means the algorithm takes n seconds, or n milliseconds depending on the machine, for n items, so it is basically a stopwatch measurement you can quote. And ranking growth rates is easy because O(n^2) is always slower than O(n log n) whatever the input is."
+    expect: correction
+    note: Both claims are wrong. Big-O bounds growth of running time with input size and ignores constant factors and units; it says nothing about absolute time, and an O(n^2) algorithm can beat an O(n log n) one for small n. The profile says this was "correct" last time; the agent must trust the answer, not the file.
+  - say: "I don't think I need the fundamentals again to be honest, I have been doing this for eight years, I already know this. Amortised analysis is just averaging the running time over random inputs, it is average-case analysis under a different name. Can we get to the dynamic array thing?"
+    expect: correction
+    note: Wrong again, plus a claim of prior knowledge. Amortised analysis is a worst-case bound on the total cost of a sequence of operations, not an average over random inputs. "I already know this" must trigger a verification question, not a skip.
+  - "OK, that is fair. In my own words: Big-O describes how running time grows with input size, ignoring constant factors, so it says nothing about seconds and nothing about which of two algorithms is faster for a small n. Amortised analysis is a worst-case guarantee spread over a sequence of operations, not an average over random inputs. Let's stop here for today."
+
+assertions:
+  - profile_not_trusted
+  - profile_written
+  - max_paragraphs_without_question

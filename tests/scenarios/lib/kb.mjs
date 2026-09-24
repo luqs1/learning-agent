@@ -29,10 +29,17 @@ export function loadKb(kbRoot, preferredSlug) {
       if (f.endsWith(".md")) files[f] = fs.readFileSync(path.join(topicDir, f), "utf8");
     }
   }
-  const conceptFiles = Object.keys(files).filter((f) => f !== "sources.md").sort();
+  // progress.md is learner memory, not research; it is never a concept file.
+  const conceptFiles = Object.keys(files).filter((f) => !NON_CONCEPT_FILES.has(f)).sort();
   const sources = files["sources.md"] ? parseSourcesTable(files["sources.md"]) : null;
-  return { root: kbRoot, topicDirs, slug, topicDir, files, conceptFiles, sources, traces: loadTraces(kbRoot) };
+  const learnerFile = path.join(kbRoot, "learner.md");
+  const learner = fs.existsSync(learnerFile) ? fs.readFileSync(learnerFile, "utf8") : null;
+  const progress = files["progress.md"] ?? null;
+  return { root: kbRoot, topicDirs, slug, topicDir, files, conceptFiles, sources, learner, progress, traces: loadTraces(kbRoot) };
 }
+
+/** Files in a topic folder that are not research concept files. */
+export const NON_CONCEPT_FILES = new Set(["sources.md", "progress.md"]);
 
 export function loadTraces(kbRoot) {
   const dir = path.join(kbRoot, ".traces");

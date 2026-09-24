@@ -61,8 +61,9 @@ export function scenarioReport(run) {
   lines.push("");
   lines.push("## Knowledge base files");
   lines.push("");
+  if (kb.learner) lines.push(`- learner.md (${kb.learner.split("\n").length} lines, at the KB root)`);
   for (const f of Object.keys(kb.files).sort()) lines.push(`- ${f} (${kb.files[f].split("\n").length} lines)`);
-  if (!Object.keys(kb.files).length) lines.push("(none)");
+  if (!Object.keys(kb.files).length && !kb.learner) lines.push("(none)");
   lines.push("");
   lines.push("## Transcript");
   for (const [i, t] of turns.entries()) {

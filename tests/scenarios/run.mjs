@@ -23,7 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ROOT } from "../lib/repo.mjs";
-import { loadFixtures, SCENARIO_DIR } from "./lib/fixtures.mjs";
+import { loadFixtures, writeSeed, SCENARIO_DIR } from "./lib/fixtures.mjs";
 import { runTurn } from "./lib/driver.mjs";
 import { loadKb, allEvents } from "./lib/kb.mjs";
 import { judge as llmJudge, DEFAULT_JUDGE_MODEL } from "./lib/judge.mjs";
@@ -62,7 +62,7 @@ const runDir = evaluateDir || path.join(SCENARIO_DIR, ".runs", stamp);
 if (evaluateDir) scenarios = scenarios.filter((s) => fs.existsSync(path.join(runDir, s.domain, s.name, "turns.json")));
 
 console.log(`Scenarios: ${scenarios.length}  model=${model}  judge=${argv["no-judge"] ? "off" : judgeModel}  concurrency=${concurrency}${evaluateDir ? "  (evaluate only)" : ""}`);
-for (const s of scenarios) console.log(`  ${s.id.padEnd(45)} ${s.level.padEnd(12)} ${s.turns.length} turns  ${s.assertions.length} assertions`);
+for (const s of scenarios) console.log(`  ${s.id.padEnd(45)} ${s.level.padEnd(12)} ${s.turns.length} turns  ${s.assertions.length} assertions${Object.keys(s.seed).length ? `  seed: ${Object.keys(s.seed).join(", ")}` : ""}`);
 
 if (argv["dry-run"]) {
   console.log("\nDry run: fixtures are valid; nothing executed.");
@@ -98,6 +98,8 @@ async function runScenario(scenario) {
   const kbRoot = path.join(dir, "kb");
   fs.mkdirSync(kbRoot, { recursive: true });
   const log = (msg) => console.log(`[${scenario.id}] ${msg}`);
+  const seeded = writeSeed(kbRoot, scenario.seed);
+  if (seeded.length) log(`seeded KB with: ${seeded.join(", ")}`);
   const sessionId = randomUUID();
   const startedAt = Date.now();
   const turns = [];
