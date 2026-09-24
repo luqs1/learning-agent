@@ -9,6 +9,9 @@
 //   6. bundled-script paths: claude writes `${CLAUDE_SKILL_DIR}/scripts/x.sh`
 //      (substituted by Claude Code), opencode writes `scripts/x.sh` (relative
 //      to the base directory its skill tool prints)
+//   7. the researcher subagent's frontmatter (claude: name/description/tools/skills;
+//      opencode: description/mode/color, with the tool restriction applied by
+//      the plugin JS instead)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PLATFORMS, MIRRORED, PLATFORM_ONLY, SKILL_SCRIPTS_PREFIX, listFiles, read } from "../lib/repo.mjs";
@@ -47,9 +50,9 @@ for (const [claudeFile, opencodeFile] of MIRRORED) {
   test(`parity: ${claudeFile} frontmatter differs from ${opencodeFile} only in the allowed keys`, () => {
     const c = parseFrontmatter(read(claudeFile)).frontmatter;
     const o = parseFrontmatter(read(opencodeFile)).frontmatter;
-    const isAgent = claudeFile.endsWith("agents/learning.md");
-    const allowedOnlyClaude = isAgent ? new Set(["name", "skills"]) : new Set(["user-invocable", "allowed-tools"]);
-    const allowedOnlyOpencode = isAgent ? new Set(["mode", "color"]) : new Set();
+    const kind = claudeFile === PLATFORMS.claude.agent ? "agent" : claudeFile === PLATFORMS.claude.subagent ? "subagent" : "skill";
+    const allowedOnlyClaude = kind === "agent" ? new Set(["name", "skills"]) : kind === "subagent" ? new Set(["name", "tools", "skills"]) : new Set(["user-invocable", "allowed-tools"]);
+    const allowedOnlyOpencode = kind === "skill" ? new Set() : new Set(["mode", "color"]);
     for (const k of Object.keys(c)) {
       if (!(k in o)) assert.ok(allowedOnlyClaude.has(k), `key '${k}' exists only in ${claudeFile}`);
       else assert.deepEqual(c[k], o[k], `frontmatter key '${k}' differs between trees`);
