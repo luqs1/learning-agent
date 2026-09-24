@@ -22,9 +22,11 @@ Three cooperating parts plus a slash command:
 - **`learning-assessment` (gate skill, not user-invocable)** — before any claim,
   checks whether it is backed by verified, cited research. A single failed check
   forces research. Enforces the iron law: *no claim without a source*.
-- **`learning-research` (skill, not user-invocable)** — multi-angle research
-  (technical accuracy, expert perspective, contested areas), fetches primary
-  sources, and stores them as a structured, citable knowledge base.
+- **`learning-research` (skill, not user-invocable)** — a retrieval playbook:
+  a provider routing table (material type × domain → exact tool call), bundled
+  helper scripts for 20+ free search APIs, rules for reading each material type
+  in full, an adjacent-material step, and the knowledge-base schema (evidence
+  tiers, market-research layout).
 - **`learn` (slash command, Claude Code only)** — forks a learning session on a
   given topic.
 
@@ -49,7 +51,17 @@ Runtime flow: **assessment gate → research if it fails → teach with
 │   └── skills/
 │       ├── learn/SKILL.md            # slash command (Claude only)
 │       ├── learning-assessment/SKILL.md
-│       └── learning-research/SKILL.md
+│       └── learning-research/
+│           ├── SKILL.md
+│           └── scripts/              # provider helper scripts (bash + curl + jq/python3)
+│               ├── _lib.sh           # shared: http retries, JSON helpers, mktemp, exit codes
+│               ├── arxiv.sh, s2.sh, openalex.sh, pubmed.sh, crossref.sh      # papers
+│               ├── wikimedia-images.sh, openverse.sh                          # images
+│               ├── yt-search.sh, yt-transcript.sh                             # video
+│               ├── edgar.sh, companies-house.sh, hn.sh, reddit.sh,            # market research
+│               │   worldbank.sh, fred.sh, ons.sh, wayback.sh, news.sh, patents.sh, github.sh
+│               ├── exa.sh, websearch.sh                                       # keyed web search
+│               └── fetch-readable.sh                                          # URL → readable text
 │
 ├── .opencode/
 │   └── plugins/learning-agent.js     # registers the opencode agent + skills at runtime
@@ -57,7 +69,9 @@ Runtime flow: **assessment gate → research if it fails → teach with
 │   ├── agents/learning.md            # agent prompt (opencode flavour)
 │   └── skills/
 │       ├── learning-assessment/SKILL.md
-│       └── learning-research/SKILL.md
+│       └── learning-research/
+│           ├── SKILL.md
+│           └── scripts → ../../../claude/skills/learning-research/scripts   # relative symlink
 │
 ├── scripts/trace-summary.mjs         # prints a session trace as a timeline (npm run trace)
 ├── tests/                            # see tests/README.md
@@ -84,9 +98,67 @@ other. The **only intended differences** between the copies are:
    - opencode agent (`opencode/agents/learning.md`): `description`, `mode`,
      `color` — skills are registered programmatically by
      `.opencode/plugins/learning-agent.js`, not via frontmatter.
+   - Claude skills carry `user-invocable: false` (and `learning-research` also
+     `allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/*)` so its scripts run
+     without permission prompts); opencode skills carry neither, because
+     opencode only accepts `name`, `description`, `license`, `compatibility`,
+     `metadata`.
+3. **Script paths in `learning-research/SKILL.md`:**
+   - Claude Code → `${CLAUDE_SKILL_DIR}/scripts/<name>.sh`
+   - opencode    → `scripts/<name>.sh`
+   (see [Bundled scripts and path resolution](#bundled-scripts-and-path-resolution)).
 
 The `learn` slash command lives **only** under `claude/` (opencode has no
-slash-command equivalent here). Everything else should match.
+slash-command equivalent here). Everything else should match. The opencode copy
+of `learning-research/SKILL.md` is derived mechanically from the Claude copy:
+
+```bash
+sed -e '/^user-invocable: false$/d' -e '/^allowed-tools: /d' \
+    -e 's#~/.claude/learning/#~/.config/opencode/learning/#g' \
+    -e 's#\${CLAUDE_SKILL_DIR}/scripts#scripts#g' \
+    claude/skills/learning-research/SKILL.md > opencode/skills/learning-research/SKILL.md
+```
+
+Edit the Claude copy, re-run that, and commit both. `npm test` (the parity
+lint) applies the same normalisation and fails on any other drift.
+
+## Bundled scripts and path resolution
+
+`learning-research` ships helper scripts in `claude/skills/learning-research/scripts/`.
+`opencode/skills/learning-research/scripts` is a **relative symlink** to that
+directory (the same trick as `CLAUDE.md → AGENTS.md`), so there is one copy to
+maintain and both plugin trees see it.
+
+How each platform lets `SKILL.md` refer to those scripts:
+
+- **Claude Code** substitutes `${CLAUDE_SKILL_DIR}` (the directory containing
+  the skill's `SKILL.md` — for a plugin skill that is the skill's subdirectory
+  inside the installed plugin, not the plugin root) in the skill's markdown
+  body and in `allowed-tools` Bash rules. `${CLAUDE_PLUGIN_ROOT}` (the plugin's
+  install directory) is also substituted in plugin skills. So
+  `${CLAUDE_SKILL_DIR}/scripts/arxiv.sh` resolves wherever the marketplace
+  installs the plugin, and the matching `allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/*)`
+  rule pre-approves running them. Docs: https://code.claude.com/docs/en/skills
+- **opencode** does no substitution. When the model loads a skill, the `skill`
+  tool returns the body followed by `Base directory for this skill: <path>` and
+  the note that relative paths such as `scripts/` resolve against it, plus a
+  sampled file list. The opencode copy therefore uses plain `scripts/<name>.sh`
+  paths. opencode discovers the skill through `config.skills.paths`, which
+  `.opencode/plugins/learning-agent.js` points at `opencode/skills/`.
+
+Script conventions (enforce them in any new script):
+
+- `#!/usr/bin/env bash`, source `_lib.sh`, bash 3.2 compatible (macOS
+  `/bin/bash`): no associative arrays, no `mapfile`, no `${var,,}`.
+- Dependencies: `curl`, `jq`, `python3` stdlib only (`yt-dlp` for the two
+  video scripts, `pdftotext`/`pypdf` optional for PDFs). Nothing to install.
+- `--help` on stdout (exit 0); JSON on stdout; errors on stderr; exit `1` on
+  failure, `2` when a required API key is unset — and the exit-2 message must
+  name the keyless fallback. Zero keys must still work end to end.
+- Temp files only via `mktemp` under `$LA_TMP` (cleaned on exit), so scripts
+  can be run concurrently by a parallel research step.
+- Test against the live API before committing; paste a real output line in
+  the PR.
 
 When bumping the version, update it in all three manifests:
 `package.json`, `claude/.claude-plugin/plugin.json`, and
@@ -96,10 +168,18 @@ When bumping the version, update it in all three manifests:
 
 - One folder per topic, with a **stable slug** reused across sessions
   (e.g. `rust-ownership-model`). Don't invent a new slug each time.
-- `sources.md` holds a table of every fetched source with a credibility rating;
-  one `<concept-slug>.md` file per concept.
+- `sources.md` holds a table of every fetched source with columns
+  `URL | Title | Type | Domain | Tier | Published | Accessed | Related-to | Summary`.
+  `Type` is the material kind (paper, article, first-party, video, image,
+  course, repo, filing, dataset, news, forum, patent, report); `Tier` is the
+  evidence tier 1–5 (market research: filing > first-party announcement >
+  reputable press > analyst summary > forum); `Related-to` links a neighbour
+  found by the adjacent-material step to its primary source.
+- One `<concept-slug>.md` file per concept. Market-research topics add
+  `companies/<company-slug>.md`, `market-size.md`, `customers.md`,
+  `timeline.md`; learning topics may add `courses.md`.
 - Inline citation format is `[source: filename.md]`.
-- One concept per file; split files that exceed ~200 lines.
+- One concept (or entity) per file; split files that exceed ~200 lines.
 - On returning to an existing topic, **read what's there before researching** —
   only fill gaps, don't re-research.
 

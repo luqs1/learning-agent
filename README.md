@@ -66,6 +66,28 @@ Research persists across sessions. If you come back to a topic later, the agent 
 
 The same verify-and-cite engine works for questions that are not lessons — sizing a market, mapping funded competitors, checking a hypothesis against the evidence. A dedicated research mode that swaps the teaching loop for a brief-building loop (every number cited, contested and unknown areas called out) is coming via [issue #9](https://github.com/luqs1/learning-agent/issues/9); until then, the teaching mode will still research and cite, it just insists on teaching you along the way.
 
+### Search providers and API keys
+
+The research skill routes each kind of material to the provider that is best for it — arXiv, Semantic Scholar, OpenAlex, PubMed and Crossref for papers; Wikimedia Commons and Openverse for diagrams; yt-dlp for lecture transcripts; SEC EDGAR, Companies House, ONS, World Bank, FRED, the Wayback Machine, Hacker News, Reddit, Google News and Google Patents for market research — through small bundled scripts (`claude/skills/learning-research/scripts/`, bash + curl + jq + python3, each with `--help`). It reads what it finds in full (PDF pages, video transcripts, viewed images, cloned repos) before citing, and stores every source with a type, domain and evidence tier.
+
+**Everything works with no API keys.** Every provider above is free and keyless. Optional keys unlock extras; set them as environment variables and the scripts pick them up, otherwise they fall back and say so:
+
+| Env var | Unlocks | Free tier |
+|---|---|---|
+| `EXA_API_KEY` | Exa neural search, **findSimilar** ("adjacent material") and page contents via `exa.sh` | [dashboard.exa.ai](https://dashboard.exa.ai) |
+| `BRAVE_API_KEY` | Brave web search from the shell (`websearch.sh`) — useful in opencode, which has no built-in web search | [brave.com/search/api](https://brave.com/search/api/), 2,000 queries/month |
+| `TAVILY_API_KEY` | Tavily web search (`websearch.sh`, used if Brave is not set) | [tavily.com](https://tavily.com), 1,000 credits/month |
+| `S2_API_KEY` | A dedicated Semantic Scholar rate limit (the shared pool 429s often) | [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api) |
+| `YOUTUBE_API_KEY` | YouTube Data API search with view counts (otherwise yt-dlp search) | [Google Cloud console](https://console.cloud.google.com/apis/library/youtube.googleapis.com), 10k units/day |
+| `COMPANIES_HOUSE_API_KEY` | Officers, persons with significant control and filing JSON (otherwise the public pages are scraped) | [developer.company-information.service.gov.uk](https://developer.company-information.service.gov.uk/) |
+| `FRED_API_KEY` | FRED series search and unit/frequency transforms (series data works keyless via CSV) | [fred.stlouisfed.org/docs/api](https://fred.stlouisfed.org/docs/api/api_key.html) |
+| `LENS_API_KEY` | Lens.org patent API (otherwise Google Patents) | [lens.org](https://www.lens.org/lens/user/subscriptions), non-commercial |
+| `GITHUB_TOKEN` | GitHub code search and a higher rate limit | any personal access token |
+| `EDGAR_USER_AGENT` | Your name and email for SEC requests, which the SEC asks for (`"Jane Doe jane@example.com"`) | — |
+| `OPENALEX_MAILTO`, `CROSSREF_MAILTO`, `NCBI_API_KEY` | "Polite pool" / higher rate limits for OpenAlex, Crossref, PubMed | — |
+
+In Claude Code the built-in `WebSearch` / `WebFetch` tools and, if you have the Exa MCP server installed, `mcp__exa__web_search_exa` / `web_fetch_exa` are used alongside the scripts. `yt-dlp` must be installed for video search and transcripts (`brew install yt-dlp`); `pdftotext` (`brew install poppler`) or `pip install pypdf` gives plain-text PDF extraction — without them the agent reads PDFs with its own Read tool instead.
+
 ## Supported tools
 
 - [opencode](https://opencode.ai)
