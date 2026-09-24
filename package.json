@@ -3,5 +3,15 @@
   "version": "1.1.0",
   "type": "module",
   "main": ".opencode/plugins/learning-agent.js",
-  "oc-plugin": ["server"]
+  "oc-plugin": [
+    "server"
+  ],
+  "scripts": {
+    "test": "node --test \"tests/lint/**/*.test.mjs\"",
+    "test:scenarios": "node tests/scenarios/run.mjs",
+    "trace": "node scripts/trace-summary.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }
