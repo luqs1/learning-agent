@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PLATFORMS, PROMPT_FILES, CITATION_RE, CITATION_FILE_RE, CITATION_PLACEHOLDERS, read } from "../lib/repo.mjs";
 import { parseFrontmatter } from "../lib/frontmatter.mjs";
+import { SOURCES_COLUMNS } from "../scenarios/lib/kb.mjs";
 
 const TRACE_EVENTS = [
   "session.start",
@@ -69,7 +70,8 @@ for (const [name, platform] of Object.entries(PLATFORMS)) {
     assert.match(research, /Angle 1: Technical Accuracy/);
     assert.match(research, /Angle 2: Expert Mindset/);
     assert.match(research, /Angle 3: Contested and Uncertain/);
-    assert.match(research, /\| URL \| Title \| Date Accessed \| Credibility \| Summary \|/, "sources.md table header changed; update tests/scenarios/lib/kb.mjs too");
+    const header = `| ${SOURCES_COLUMNS.join(" | ")} |`;
+    assert.ok(research.includes(header), `sources.md table header must be exactly '${header}' (SOURCES_COLUMNS in tests/scenarios/lib/kb.mjs); change the skill and the parser together`);
     assert.match(research, /## Contested \/ Uncertain/);
   });
 }

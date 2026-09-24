@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { listFixtureFiles, loadFixture, loadFixtures } from "../scenarios/lib/fixtures.mjs";
 import { ASSERTIONS, CORE_ASSERTIONS } from "../scenarios/lib/assertions.mjs";
-import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility, referencesAnyRow } from "../scenarios/lib/kb.mjs";
+import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility, tierToCredibility, referencesAnyRow } from "../scenarios/lib/kb.mjs";
 import { buildArgs, harnessSystemPrompt } from "../scenarios/lib/driver.mjs";
 
 const REQUIRED_DOMAINS = { "computer-science": 2, medicine: 2, "machine-learning": 2, "market-research": 2 };
@@ -80,10 +80,10 @@ function syntheticKb() {
     path.join(topic, "sources.md"),
     `# Sources: Hash tables
 
-| URL | Title | Date Accessed | Credibility | Summary |
-|-----|-------|---------------|-------------|---------|
-| https://docs.python.org/3/faq/design.html | Python Design FAQ | 2026-09-24 | High | Official docs on dict implementation |
-| https://example.com/blog | Someone's blog | 2026-09-24 | Low | Secondary summary |
+| URL | Title | Type | Domain | Tier | Published | Accessed | Related-to | Summary |
+|-----|-------|------|--------|------|-----------|----------|------------|---------|
+| https://docs.python.org/3/faq/design.html | Python Design FAQ | docs | cs | 1 | unknown | 2026-09-24 | | Official docs on dict implementation |
+| https://example.com/blog | Someone's blog | article | cs | 4 | 2024-01-02 | 2026-09-24 | https://docs.python.org/3/faq/design.html | not yet read; secondary summary |
 `,
   );
   fs.writeFileSync(
@@ -238,6 +238,45 @@ test("kb: a concept file may reference a source by URL, title or distinctive hos
   assert.equal(referencesAnyRow("**Sources used:** something on medium.com", rows).length, 0);
   assert.equal(referencesAnyRow("see https://docs.python.org/3/x.html", rows).length, 1);
   assert.equal(referencesAnyRow("nothing relevant", rows).length, 0);
+});
+
+test("kb: the current sources layout parses by header; Tier maps to credibility, Accessed is the date, Related-to is kept", () => {
+  const kb = loadKb(syntheticKb(), "hash-tables");
+  assert.equal(kb.sources.length, 2);
+  const [primary, neighbour] = kb.sources;
+  assert.deepEqual(
+    { url: primary.url, type: primary.type, domain: primary.domain, tier: primary.tier, credibility: primary.credibility, date: primary.date, published: primary.published, relatedTo: primary.relatedTo },
+    { url: "https://docs.python.org/3/faq/design.html", type: "docs", domain: "cs", tier: "1", credibility: "High", date: "2026-09-24", published: "unknown", relatedTo: "" },
+  );
+  assert.equal(neighbour.credibility, "Low");
+  assert.equal(neighbour.relatedTo, "https://docs.python.org/3/faq/design.html");
+  assert.match(neighbour.summary, /not yet read/);
+  assert.equal(tierToCredibility("2"), "High");
+  assert.equal(tierToCredibility("3"), "Medium");
+  assert.equal(tierToCredibility("5"), "Low");
+  assert.equal(tierToCredibility("?"), null, "a pending tier is not a rating");
+  const bad = parseSourcesTable("| URL | Title | Type | Domain | Tier | Published | Accessed | Related-to | Summary |\n|---|---|---|---|---|---|---|---|---|\n| https://a.example | A | paper | cs | High | unknown | 2026-09-24 | | s |\n");
+  assert.equal(bad[0].credibility, "High", "a legacy word in the Tier cell is still understood only if it is a rating word");
+  const junk = parseSourcesTable("| URL | Title | Type | Domain | Tier | Published | Accessed | Related-to | Summary |\n|---|---|---|---|---|---|---|---|---|\n| https://a.example | A | paper | cs | ? | unknown | 2026-09-24 | | s |\n");
+  assert.equal(junk[0].credibility, "?", "an unparseable tier is returned as written so sources_credibility fails");
+});
+
+test("kb: the legacy sources layout (Date Accessed | Credibility) still parses, with and without a header row", () => {
+  const withHeader = parseSourcesTable("| URL | Title | Date Accessed | Credibility | Summary |\n|---|---|---|---|---|\n| https://a.example | A | 2026-09-24 | Medium (textbook) | s |\n");
+  assert.deepEqual([withHeader[0].date, withHeader[0].credibility, withHeader[0].summary, withHeader[0].tier], ["2026-09-24", "Medium", "s", ""]);
+  const noHeader = parseSourcesTable("| https://a.example | A | 2026-09-24 | Low | one | two |\n");
+  assert.deepEqual([noHeader[0].date, noHeader[0].credibility, noHeader[0].summary], ["2026-09-24", "Low", "one | two"]);
+});
+
+test("assertions: sources_credibility and numeric_claims_cited work on the current layout (tier-derived ratings)", () => {
+  const ctx = syntheticCtx();
+  assert.equal(ASSERTIONS.sources_credibility.run(ctx, {}).pass, true);
+  ctx.turns[1].agent.text = "Python dicts resize at 2/3 load [source: hash-collisions.md]. What triggers the resize?";
+  assert.equal(ASSERTIONS.numeric_claims_cited.run(ctx, {}).pass, true, "a Tier 1 row counts as High-credibility backing");
+  const ctx2 = syntheticCtx();
+  ctx2.kb.sources[0].tier = "4";
+  ctx2.kb.sources[0].credibility = "Low";
+  assert.match(ASSERTIONS.sources_credibility.run(ctx2, {}).detail, /no High-credibility/);
 });
 
 test("kb: sources table parser handles markdown links and skips header rows", () => {

@@ -8,6 +8,12 @@ import { parseTrace } from "../../../scripts/trace-summary.mjs";
 
 export const CREDIBILITY = ["High", "Medium", "Low"];
 
+// The sources.md table header the research skill prescribes. The lint checks
+// the skill text carries exactly this header, so the two cannot drift apart.
+export const SOURCES_COLUMNS = ["URL", "Title", "Type", "Domain", "Tier", "Published", "Accessed", "Related-to", "Summary"];
+// The pre-#6 layout, still accepted so old knowledge bases keep parsing.
+export const LEGACY_SOURCES_COLUMNS = ["URL", "Title", "Date Accessed", "Credibility", "Summary"];
+
 export function loadKb(kbRoot, preferredSlug) {
   const topicDirs = fs.existsSync(kbRoot)
     ? fs
@@ -52,11 +58,18 @@ export function allEvents(kb) {
 }
 
 /**
- * Parse the sources.md table. Columns per the research skill:
- * | URL | Title | Date Accessed | Credibility | Summary |
+ * Parse the sources.md table. Columns are taken from the header row, so both
+ * layouts parse:
+ *   current: | URL | Title | Type | Domain | Tier | Published | Accessed | Related-to | Summary |
+ *   legacy:  | URL | Title | Date Accessed | Credibility | Summary |
+ * Every row gets the same shape. `credibility` is High/Medium/Low: from the
+ * Credibility cell (legacy) or derived from Tier (1-2 High, 3 Medium, 4-5 Low);
+ * an unparseable cell is returned as written so the check fails. `date` is the
+ * Accessed / Date Accessed cell.
  */
 export function parseSourcesTable(md) {
   const rows = [];
+  let columns = null;
   for (const line of md.split("\n")) {
     if (!line.trim().startsWith("|")) continue;
     const cells = line
@@ -66,9 +79,35 @@ export function parseSourcesTable(md) {
       .split("|")
       .map((c) => c.trim());
     if (cells.length < 4) continue;
-    if (/^-+$/.test(cells[0].replace(/:/g, "")) || cells[0].toLowerCase() === "url") continue;
-    const [url, title, date, credibility, ...rest] = cells;
-    rows.push({ url: stripLink(url), title: stripLink(title), date, credibility: normaliseCredibility(credibility), credibilityRaw: credibility, summary: rest.join(" | "), raw: line });
+    if (cells[0].toLowerCase() === "url") {
+      columns = cells.map((c) => c.toLowerCase());
+      continue;
+    }
+    if (/^-+$/.test(cells[0].replace(/:/g, ""))) continue;
+    const cols = columns || LEGACY_SOURCES_COLUMNS.map((c) => c.toLowerCase());
+    const at = (name) => {
+      const i = cols.indexOf(name);
+      return i >= 0 && i < cells.length ? cells[i] : "";
+    };
+    const summaryIdx = cols.indexOf("summary");
+    const summary = summaryIdx >= 0 ? cells.slice(summaryIdx).join(" | ") : "";
+    const credCell = at("credibility");
+    const tierCell = at("tier");
+    const credibility = credCell ? normaliseCredibility(credCell) : tierCell ? (tierToCredibility(tierCell) ?? tierCell) : "";
+    rows.push({
+      url: stripLink(at("url")),
+      title: stripLink(at("title")),
+      type: at("type"),
+      domain: at("domain"),
+      tier: tierCell,
+      published: at("published"),
+      date: at("accessed") || at("date accessed"),
+      relatedTo: stripLink(at("related-to")),
+      credibility,
+      credibilityRaw: credCell || tierCell,
+      summary,
+      raw: line,
+    });
   }
   return rows;
 }
@@ -77,6 +116,14 @@ export function parseSourcesTable(md) {
 export function normaliseCredibility(cell) {
   const m = String(cell).replace(/[*_`]/g, "").trim().match(/^(high|medium|low)\b/i);
   return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : String(cell).trim();
+}
+
+/** Evidence tier 1-5 -> High/Medium/Low (1-2 primary/first-party, 3 reputable secondary, 4-5 weak/forum); null if not a tier. */
+export function tierToCredibility(cell) {
+  const m = String(cell).replace(/[*_`]/g, "").trim().match(/^([1-5])\b/);
+  if (!m) return null;
+  const t = Number(m[1]);
+  return t <= 2 ? "High" : t === 3 ? "Medium" : "Low";
 }
 
 function stripLink(cell) {
