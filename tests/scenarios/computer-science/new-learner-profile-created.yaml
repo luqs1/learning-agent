@@ -1,0 +1,27 @@
+# Computer science, brand-new learner with no memory files at all. The agent
+# must open with the generic gauging question, teach, correct the wrong turn,
+# and by the end of the session (the last turn is a synthesis plus a goodbye)
+# have created learner.md and binary-search/progress.md with dated entries,
+# telling the learner once that the profile exists.
+name: new-learner-profile-created
+domain: computer-science
+level: beginner
+topic: binary search
+slug: binary-search
+
+persona: |
+  First-year student who has written loops and lists in Python but has never
+  studied algorithms. Curious, answers in short plain sentences, admits when
+  unsure. Has never used this tool before.
+
+turns:
+  - "I want to understand binary search properly. I've never studied algorithms formally, I just write Python for coursework."
+  - "My mental model: you look at the middle of a list, and depending on whether the thing you want is bigger or smaller you throw away half and repeat. I'm not sure why people say the list has to be sorted first."
+  - say: "I think binary search works on any list as long as you know its length. Sorting it first is just an optimisation that makes it a bit faster, the algorithm still finds the element either way."
+    expect: correction
+    note: Wrong. Without sorted input the midpoint comparison says nothing about which half holds the target, so binary search can miss elements entirely; sorting is a precondition, not an optimisation.
+  - "Got it. In my own words: binary search needs sorted input because the comparison at the midpoint only tells you which half to discard when the order is guaranteed. Each step halves the search space, so it takes about log2 of n steps. That's all I have time for today, thanks, let's stop here."
+
+assertions:
+  - profile_written
+  - max_paragraphs_without_question

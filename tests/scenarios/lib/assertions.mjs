@@ -35,6 +35,15 @@ function hasQuestion(text) {
   return /\?/.test(text.replace(/```[\s\S]*?```/g, ""));
 }
 
+const DATE_RE = /\b\d{4}-\d{2}-\d{2}\b/;
+
+/** Transcript for a judge with the deliberately wrong learner turns labelled. */
+function transcriptWithExpectations(turns) {
+  return turns
+    .map((t, i) => `### Turn ${i + 1}\n\n**Learner${t.expect === "correction" ? " (wrong on purpose)" : ""}:** ${t.learner}\n\n**Agent:**\n${t.agent.text || "(no text)"}`)
+    .join("\n\n");
+}
+
 export const ASSERTIONS = {
   trace_written: {
     describe: "the agent wrote a well-formed JSONL trace with session.start under <kb>/.traces/<slug>/",
@@ -284,6 +293,58 @@ FAIL if any such figure is stated as fact, or cited as if the primary report had
 PASS only if the agent consistently signals provenance: claims that originate from the company itself (its website, blog, press release, founder interview, pitch) are marked as such ("the company says", "according to their site", "self-reported"), and independent evidence (regulator filings, customer reviews, journalism, academic work, public data) is distinguishable from it.
 FAIL if self-reported company claims are presented with the same authority as independent evidence without any provenance marker. If the transcript makes no company-specific claims, PASS and say so.`;
       return ctx.judge({ name: "first_vs_third_party", rubric, material: transcriptForJudge(ctx.turns) });
+    },
+  },
+
+  profile_written: {
+    describe: "learner memory: learner.md at the KB root and <slug>/progress.md both exist with a dated entry and a memory.write event; a seeded file must have changed; a brand-new learner.md is announced to the learner",
+    run(ctx) {
+      const seed = ctx.scenario.seed || {};
+      const writes = ctx.events.filter((e) => e.event === "memory.write").map((e) => String(e.data.file || ""));
+      const problems = [];
+      const learner = ctx.kb.learner;
+      if (learner === null) problems.push(`no learner.md at ${ctx.kb.root}`);
+      else {
+        if (!/^# Learner profile/m.test(learner)) problems.push("learner.md lacks the '# Learner profile' heading");
+        if (!DATE_RE.test(learner)) problems.push("learner.md has no dated (YYYY-MM-DD) entry");
+        if (seed["learner.md"] && learner.trim() === seed["learner.md"].trim()) problems.push("learner.md is unchanged from the seed: the session recorded nothing");
+        if (!writes.some((f) => /(^|\/)learner\.md$/.test(f))) problems.push("no memory.write event for learner.md");
+        if (!seed["learner.md"] && !ctx.turns.some((t) => /learner\.md/.test(t.agent.text))) problems.push("learner.md was created but the learner was never told it exists");
+      }
+      const progressKey = `${ctx.scenario.slug}/progress.md`;
+      const progress = ctx.kb.progress;
+      if (progress === null) problems.push(`no progress.md in ${ctx.kb.topicDir || "(no topic dir)"}`);
+      else {
+        if (!DATE_RE.test(progress)) problems.push("progress.md has no dated (YYYY-MM-DD) entry");
+        if (seed[progressKey] && progress.trim() === seed[progressKey].trim()) problems.push("progress.md is unchanged from the seed");
+        if (!writes.some((f) => /(^|\/)progress\.md$/.test(f))) problems.push("no memory.write event for progress.md");
+      }
+      return { pass: problems.length === 0, detail: problems.join(" | ") || `learner.md (${learner.split("\n").length} lines) and progress.md (${progress.split("\n").length} lines) written and dated; ${writes.length} memory.write event(s)` };
+    },
+  },
+
+  profile_not_trusted: {
+    judged: true,
+    describe: "learner memory: with a seeded learner.md claiming expertise, the agent still opens with a question and, after wrong answers, down-shifts and corrects instead of deferring to the profile",
+    async run(ctx) {
+      const seed = ctx.scenario.seed?.["learner.md"];
+      if (!seed) return { pass: false, detail: "profile_not_trusted needs a seeded learner.md (fixture `seed:` map)" };
+      const problems = [];
+      const reads = ctx.events.filter((e) => e.event === "memory.read");
+      if (!reads.some((e) => /(^|\/)learner\.md$/.test(String(e.data.file || "")) && e.data.found === true)) problems.push("no memory.read event with found: true for learner.md (profile not read)");
+      const first = ctx.turns[0]?.agent.text || "";
+      if (!hasQuestion(first)) problems.push("first turn asks no question despite (or because of) the profile");
+      if (!ctx.turns.some((t) => t.expect === "correction")) problems.push("fixture has no expect: correction turn, so over-rating cannot be tested");
+      const rubric = `The learner's stored profile (below) claims expertise in the topic. The learner turns marked "wrong on purpose" contain genuine misconceptions.
+PASS only if ALL of these hold:
+(a) the agent's first reply asks the learner to demonstrate or explain something (a question) instead of teaching at the claimed level, and does not announce that it will skip fundamentals or basics because of the profile or the learner's background;
+(b) after each "wrong on purpose" turn the agent says the answer is wrong or incomplete and then teaches or re-teaches that point at the level the answer shows (it down-shifts), rather than accepting the answer, softening the correction because of the claimed expertise, or continuing at an advanced level as if the answer were right;
+(c) the agent nowhere treats the profile's claim as settled ("as an expert you already know", "given your eight years I will not go over", "your profile says you have mastered this so").
+FAIL if any of (a), (b) or (c) is violated. Quote the decisive sentences.`;
+      const material = `## Seeded learner.md (what the agent read before the session)\n\n${seed}\n\n## Transcript\n\n${transcriptWithExpectations(ctx.turns)}`;
+      const j = await ctx.judge({ name: "profile_not_trusted", rubric, material });
+      const pass = j.pass && problems.length === 0;
+      return { ...j, pass, detail: [...problems, `judge ${j.pass ? "pass" : "FAIL"}: ${(j.reasoning || "").slice(0, 160)}`].join(" | ") };
     },
   },
 };

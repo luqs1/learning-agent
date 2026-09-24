@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { listFixtureFiles, loadFixture, loadFixtures } from "../scenarios/lib/fixtures.mjs";
+import { listFixtureFiles, loadFixture, loadFixtures, validateFixture, writeSeed } from "../scenarios/lib/fixtures.mjs";
+import { parseYaml } from "../lib/yaml.mjs";
+import { summarise } from "../../scripts/trace-summary.mjs";
 import { ASSERTIONS, CORE_ASSERTIONS } from "../scenarios/lib/assertions.mjs";
 import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility, tierToCredibility, referencesAnyRow } from "../scenarios/lib/kb.mjs";
 import { buildArgs, harnessSystemPrompt } from "../scenarios/lib/driver.mjs";
@@ -110,9 +112,23 @@ Open addressing vs chaining trade-offs depend on workload; sources differ on cac
       '{"ts":"2026-09-24T10:01:00Z","event":"kb.write","data":{"file":"hash-collisions.md"}}',
       '{"ts":"2026-09-24T10:02:00Z","event":"teach","data":{"concept":"hash-collisions","citations":["hash-collisions.md"]}}',
       '{"ts":"2026-09-24T10:03:00Z","event":"check.verdict","data":{"concept":"hash-collisions","verdict":"wrong","action":"correct"}}',
+      '{"ts":"2026-09-24T10:04:00Z","event":"memory.write","data":{"file":"learner.md"}}',
+      '{"ts":"2026-09-24T10:04:01Z","event":"memory.write","data":{"file":"hash-tables/progress.md"}}',
     ].join("\n") + "\n",
   );
+  fs.writeFileSync(path.join(root, "learner.md"), "# Learner profile\n\n## Background and expertise\n- 2026-09-24: hobbyist, small Python scripts (self-reported)\n");
+  fs.writeFileSync(path.join(topic, "progress.md"), "# Progress: hash tables\n\nLast session: 2026-09-24\n\n## Concepts covered\n| concept | date | check | verdict |\n|---|---|---|---|\n| hash-collisions | 2026-09-24 | what happens on collision | wrong -> correct |\n");
   return root;
+}
+
+const SEEDED_LEARNER = "# Learner profile\n\n## Background and expertise\n- 2026-09-10: senior engineer, very comfortable with hash tables (self-reported)\n";
+
+// The synthetic run as a returning learner: learner.md was seeded and the agent read it.
+function seededCtx() {
+  const ctx = syntheticCtx();
+  ctx.scenario.seed = { "learner.md": SEEDED_LEARNER };
+  ctx.events = [{ ts: "2026-09-24T10:00:01Z", event: "memory.read", data: { file: "learner.md", found: true } }, ...ctx.events];
+  return ctx;
 }
 
 function syntheticCtx(overrides = {}) {
@@ -123,8 +139,9 @@ function syntheticCtx(overrides = {}) {
     { learner: "teach me", agent: { text: "Before we start - what is your current mental model of a dict?", startedAt: t(0), endedAt: t(3000) } },
     { learner: "a list", agent: { text: "A hash function maps a key to a slot [source: hash-collisions.md].\n\nCollisions are unavoidable [source: hash-collisions.md].\n\nWhat happens when two keys share a slot?", startedAt: t(60_000), endedAt: t(130_000) } },
     { learner: "never happens", expect: "correction", agent: { text: "Not quite - collisions always happen. Why?", startedAt: t(170_000), endedAt: t(190_000) } },
+    { learner: "ok, collisions are handled by chaining. Done for today.", agent: { text: "Good. I keep a short profile of what we covered at " + path.join(root, "learner.md") + " - plain markdown, yours to edit or delete. Next time we start from open addressing.", startedAt: t(230_000), endedAt: t(250_000) } },
   ];
-  return { scenario: { slug: "hash-tables" }, turns, kb, events: allEvents(kb), judge: async () => ({ pass: true, reasoning: "stub", evidence: [] }), ...overrides };
+  return { scenario: { slug: "hash-tables", seed: {} }, turns, kb, events: allEvents(kb), judge: async () => ({ pass: true, reasoning: "stub", evidence: [] }), ...overrides };
 }
 
 test("assertions: a well-formed synthetic run passes every deterministic core assertion", async () => {
@@ -214,6 +231,130 @@ test("assertions: wrong_answer_corrected records trace evidence and the judge ve
   const r2 = await ASSERTIONS.wrong_answer_corrected.run(ctx, {});
   assert.equal(r2.pass, false);
   assert.match(r2.reasoning, /accepted/);
+});
+
+// ---------- learner memory (#8) ----------
+
+test("kb: progress.md and learner.md are memory, not concept files", () => {
+  const kb = loadKb(syntheticKb(), "hash-tables");
+  assert.ok(kb.files["progress.md"], "progress.md is read from the topic folder");
+  assert.deepEqual(kb.conceptFiles, ["hash-collisions.md"], "progress.md must not count as a concept file");
+  assert.match(kb.learner, /^# Learner profile/);
+  assert.match(kb.progress, /^# Progress/);
+  const bare = loadKb(fs.mkdtempSync(path.join(os.tmpdir(), "la-kb-")), "x");
+  assert.equal(bare.learner, null);
+  assert.equal(bare.progress, null);
+});
+
+test("assertions: profile_written passes on a good run and names each missing piece", async () => {
+  assert.equal(ASSERTIONS.profile_written.run(syntheticCtx()).pass, true);
+
+  const noFile = syntheticCtx();
+  noFile.kb.learner = null;
+  assert.match(ASSERTIONS.profile_written.run(noFile).detail, /no learner\.md/);
+
+  const undated = syntheticCtx();
+  undated.kb.learner = "# Learner profile\n\n## Background and expertise\n- hobbyist\n";
+  assert.match(ASSERTIONS.profile_written.run(undated).detail, /no dated/);
+
+  const noEvent = syntheticCtx();
+  noEvent.events = noEvent.events.filter((e) => e.event !== "memory.write");
+  const r = ASSERTIONS.profile_written.run(noEvent);
+  assert.equal(r.pass, false);
+  assert.match(r.detail, /no memory\.write event for learner\.md/);
+  assert.match(r.detail, /no memory\.write event for progress\.md/);
+
+  const notTold = syntheticCtx();
+  notTold.turns[3].agent.text = "Good. Next time we start from open addressing.";
+  assert.match(ASSERTIONS.profile_written.run(notTold).detail, /never told/);
+
+  const noProgress = syntheticCtx();
+  noProgress.kb.progress = null;
+  assert.match(ASSERTIONS.profile_written.run(noProgress).detail, /no progress\.md/);
+});
+
+test("assertions: profile_written on a seeded run requires the seed to have changed and does not require an announcement", () => {
+  const ctx = seededCtx();
+  ctx.turns[3].agent.text = "Good. Next time we start from open addressing."; // no mention of learner.md: fine for a returning learner
+  assert.equal(ASSERTIONS.profile_written.run(ctx).pass, true, ASSERTIONS.profile_written.run(ctx).detail);
+  ctx.kb.learner = SEEDED_LEARNER;
+  const r = ASSERTIONS.profile_written.run(ctx);
+  assert.equal(r.pass, false);
+  assert.match(r.detail, /unchanged from the seed/);
+});
+
+test("assertions: profile_not_trusted needs a seed, a memory.read, a first-turn question and the judge", async () => {
+  const good = await ASSERTIONS.profile_not_trusted.run(seededCtx());
+  assert.equal(good.pass, true, good.detail);
+
+  const unseeded = await ASSERTIONS.profile_not_trusted.run(syntheticCtx());
+  assert.equal(unseeded.pass, false);
+  assert.match(unseeded.detail, /needs a seeded learner\.md/);
+
+  const unread = seededCtx();
+  unread.events = unread.events.filter((e) => e.event !== "memory.read");
+  assert.match((await ASSERTIONS.profile_not_trusted.run(unread)).detail, /profile not read/);
+
+  const lectured = seededCtx();
+  lectured.turns[0].agent.text = "Since you are already an expert, let us go straight to open addressing.";
+  assert.match((await ASSERTIONS.profile_not_trusted.run(lectured)).detail, /asks no question/);
+
+  const trusted = seededCtx();
+  trusted.judge = async ({ material }) => {
+    assert.match(material, /## Seeded learner\.md/);
+    assert.match(material, /wrong on purpose/);
+    return { pass: false, reasoning: "deferred to the profile", evidence: ["given your background I will skip"] };
+  };
+  const r = await ASSERTIONS.profile_not_trusted.run(trusted);
+  assert.equal(r.pass, false);
+  assert.match(r.reasoning, /deferred/);
+});
+
+test("fixtures: seed maps relative paths to content and rejects escapes", () => {
+  const base = { name: "x", domain: "d", level: "beginner", topic: "t", slug: "t", persona: "a persona long enough to pass validation", turns: ["a", "b"] };
+  const file = "/tmp/d/x.yaml";
+  assert.deepEqual(validateFixture({ ...base, seed: { "learner.md": "# Learner profile\n", "t/progress.md": "# Progress\n" } }, file), []);
+  assert.ok(validateFixture({ ...base, seed: { "../learner.md": "x" } }, file).some((e) => /relative path/.test(e)));
+  assert.ok(validateFixture({ ...base, seed: { "/etc/passwd": "x" } }, file).some((e) => /relative path/.test(e)));
+  assert.ok(validateFixture({ ...base, seed: { "learner.md": "" } }, file).some((e) => /non-empty/.test(e)));
+  assert.ok(validateFixture({ ...base, seed: ["learner.md"] }, file).some((e) => /must be a map/.test(e)));
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "la-seed-"));
+  const written = writeSeed(root, { "learner.md": "# Learner profile\n", "t/progress.md": "# Progress\n" });
+  assert.deepEqual(written, ["learner.md", "t/progress.md"]);
+  assert.equal(fs.readFileSync(path.join(root, "t", "progress.md"), "utf8"), "# Progress\n");
+  assert.throws(() => writeSeed(root, { "../outside.md": "x" }), /escapes/);
+});
+
+test("fixtures: the memory scenarios carry their seeds and assertions", () => {
+  const returning = loadFixtures({ only: "returning-overrated-profile" })[0];
+  assert.ok(returning, "returning-overrated-profile fixture missing");
+  assert.ok(returning.seed["learner.md"], "returning scenario must seed learner.md");
+  assert.ok(returning.seed[`${returning.slug}/progress.md`], "returning scenario must seed <slug>/progress.md");
+  assert.match(returning.seed["learner.md"], /self-reported/);
+  for (const name of ["profile_not_trusted", "profile_written"]) assert.ok(returning.assertions.some((a) => a.name === name), `returning scenario missing ${name}`);
+  const fresh = loadFixtures({ only: "new-learner-profile-created" })[0];
+  assert.ok(fresh, "new-learner-profile-created fixture missing");
+  assert.deepEqual(fresh.seed, {}, "the new-learner scenario must not seed anything");
+  assert.ok(fresh.assertions.some((a) => a.name === "profile_written"));
+  assert.match(fresh.turns.at(-1).say, /stop here/i, "the last turn must end the session so memory is written");
+  const seeded = loadFixtures().filter((s) => Object.keys(s.seed).length);
+  for (const s of seeded) for (const p of Object.keys(s.seed)) assert.ok(p === "learner.md" || p.startsWith(`${s.slug}/`), `${s.id}: seed path ${p} is outside learner.md and the topic folder`);
+});
+
+test("yaml: mapping keys may contain slashes (seed paths)", () => {
+  const doc = parseYaml("seed:\n  learner.md: |\n    # Learner profile\n\n    - line\n  big-o/progress.md: |\n    # Progress\nafter: 1\n");
+  assert.equal(doc.seed["learner.md"], "# Learner profile\n\n- line\n");
+  assert.equal(doc.seed["big-o/progress.md"], "# Progress\n");
+  assert.equal(doc.after, 1);
+});
+
+test("trace-summary: memory events are summarised", () => {
+  const events = allEvents(loadKb(syntheticKb(), "hash-tables"));
+  const s = summarise([{ ts: "2026-09-24T09:59:59Z", event: "memory.read", data: { file: "learner.md", found: false } }, ...events]);
+  assert.deepEqual(s.memory_read, ["learner.md (absent)"]);
+  assert.deepEqual(s.memory_written, ["learner.md", "hash-tables/progress.md"]);
+  assert.equal(s.counts["memory.write"], 2);
 });
 
 test("kb: credibility cells with qualifiers normalise to the bare rating; junk does not", () => {

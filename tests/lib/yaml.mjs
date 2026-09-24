@@ -2,7 +2,7 @@
 // npm dependencies. Supported:
 //
 //   key: value                 scalars: plain, "double-quoted", 'single-quoted',
-//   key:                       numbers, true/false/null
+//   key:                       numbers, true/false/null; keys may contain / (paths)
 //     nested: map
 //   key:
 //     - item                   sequences of scalars or maps
@@ -78,7 +78,7 @@ class Parser {
       if (ind > indent) this.fail("bad indentation");
       const content = line.raw.slice(ind);
       if (content.startsWith("- ")) this.fail("sequence item where a mapping key was expected");
-      const m = content.match(/^([A-Za-z0-9_.-]+):(?:\s+(.*))?$/);
+      const m = content.match(/^([A-Za-z0-9_./-]+):(?:\s+(.*))?$/);
       if (!m) this.fail(`cannot parse mapping line: ${JSON.stringify(content)}`);
       const key = m[1];
       const rest = m[2] === undefined ? "" : stripComment(m[2]);
