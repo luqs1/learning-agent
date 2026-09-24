@@ -88,8 +88,12 @@ export const ASSERTIONS = {
       const hits = [];
       ctx.turns.forEach((t, i) => {
         const text = t.agent.text.replace(/```[\s\S]*?```/g, "");
-        const m = text.match(/\b(trace|tracing|trace file|jsonl|session log)\b/i);
-        if (m) hits.push(`turn ${i + 1}: "${text.slice(Math.max(0, m.index - 40), m.index + 40).replace(/\s+/g, " ")}"`);
+        // "trace"/"tracing" is also a domain word (UBO-chain tracing, ray tracing, stack trace);
+        // only count it as trace talk when the same sentence is about the bookkeeping.
+        for (const sentence of text.split(/(?<=[.!?])\s+|\n+/)) {
+          const m = sentence.match(/\b(jsonl|session log|trace file|trace event|session trace)\b/i) || (/\b(trace|tracing)\b/i.test(sentence) && /\b(file|event|log|logging|logged|set ?up|record(?:ed|ing)?|bookkeeping|session|emit(?:ted|ting)?)\b/i.test(sentence) ? sentence.match(/\b(trace|tracing)\b/i) : null);
+          if (m) hits.push(`turn ${i + 1}: "${sentence.slice(Math.max(0, m.index - 40), m.index + 40).replace(/\s+/g, " ")}"`);
+        }
       });
       return { pass: hits.length === 0, detail: hits.join(" | ") || "no tracing talk in any turn" };
     },

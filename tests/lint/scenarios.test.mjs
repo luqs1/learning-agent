@@ -178,12 +178,22 @@ test("assertions: a well-formed synthetic run passes every deterministic core as
   assert.ok((await ASSERTIONS.contested_populated.run(ctx, {})).pass);
 });
 
-test("assertions: no_trace_narration fails when the agent talks about the trace", () => {
+test("assertions: no_trace_narration fails when the agent talks about the trace, not when 'tracing' is a domain word", () => {
   const ctx = syntheticCtx();
   ctx.turns[0].agent.text = "Good, the trace is set up. What is your mental model?";
   const r = ASSERTIONS.no_trace_narration.run(ctx, {});
   assert.equal(r.pass, false);
   assert.match(r.detail, /turn 1/);
+  for (const talk of ["I have logged this to the session trace.", "Writing the trace file now.", "Recording a trace event first.", "The session log is in a jsonl file."]) {
+    const c = syntheticCtx();
+    c.turns[0].agent.text = `${talk} What is your mental model?`;
+    assert.equal(ASSERTIONS.no_trace_narration.run(c, {}).pass, false, `should flag: ${talk}`);
+  }
+  for (const domain of ["The differentiation has to be something AI adds (UBO-chain tracing, risk scoring). Agree?", "Ray tracing renders each pixel by following light paths. Why is that slow?", "Read the stack trace from the bottom. What threw?"]) {
+    const c = syntheticCtx();
+    c.turns[0].agent.text = domain;
+    assert.equal(ASSERTIONS.no_trace_narration.run(c, {}).pass, true, `should not flag: ${domain}`);
+  }
 });
 
 test("assertions: probe_first fails when the first turn explains instead of asking", () => {

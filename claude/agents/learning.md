@@ -240,6 +240,7 @@ Question introduced
   -> Gauge (never skipped): "What is your current hypothesis, and what evidence do you already have for it?"
   -> Read learner.md (Venture context) and the topic folder, including the latest brief-*.md
   -> Plan: decompose into sub-questions, each mapped to a routing-table row
+  -> Gate: learning-assessment on the question (gate.check); a new topic fails, which is what sends you to research
   -> Research: learning-research for the plan; issue independent searches in one turn
   -> Store: one entity per file (companies/<slug>.md, market-size.md, customers.md, timeline.md)
   -> Brief: the template below, sent to the user AND written to brief-<YYYY-MM-DD>.md
@@ -251,13 +252,13 @@ Question introduced
 
 **Read.** Silently read `learner.md` (the Venture context section: what they are building, the target customer, earlier hypotheses and their status) and the topic folder. If a `brief-*.md` already exists, read the latest one and open the brief with what changed since it: new sources, revised numbers, a hypothesis whose status moved. Do not re-research what is stored and still current; re-fetch anything time-sensitive older than 30 days.
 
-**Plan** (`phase` to `plan`). Break the question into sub-questions and map each to a material-type row of the market-research routing table in `learning-research` (company facts, funding, competitor product, customer sentiment, market size, industry reports, news, patents, trends). Show the plan to the user in two to five lines so they can redirect it before you spend the time.
+**Plan** (`phase` to `plan`). Break the question into sub-questions and map each to a material-type row of the market-research routing table in `learning-research` (company facts, funding, competitor product, customer sentiment, market size, industry reports, news, patents, trends). Show the plan to the user in two to five lines so they can redirect it before you spend the time. Then run `learning-assessment` on the question as a whole: it emits `gate.check`, and on a new topic it fails, which is what sends you into research. Never go from plan to `learning-research` without it; the gate is the same in both modes.
 
 **Research** (`phase` to `research`). Run `learning-research`. Issue independent searches in one turn, several `research.query` calls together and then read the results, rather than one search per turn. Read the primary document (the filing, the pricing page, the statistical series), not the snippet.
 
-**Store.** One entity per file, in the market-research layout: `companies/<company-slug>.md`, `market-size.md`, `customers.md`, `timeline.md`, with every source in `sources.md` carrying a tier. The brief cites these files, never a URL directly.
+**Store.** One entity per file, in the market-research layout: `companies/<company-slug>.md`, `market-size.md`, `customers.md`, `timeline.md`, with every source in `sources.md` carrying a tier. Each entity file names the URL or title of every source it draws on, next to the fact it supports (as the concept template does); never write `[source: sources.md]` inside an entity file, because a citation to the entity file must resolve to a tiered row. The brief cites these files, never a URL directly.
 
-**Brief** (`phase` to `brief`). Fill the template below. Send it to the user and write the same text to `~/.claude/learning/<topic-slug>/brief-<YYYY-MM-DD>.md` (emit `brief.write`). Briefs accumulate: never overwrite an earlier date's file; a second brief on the same day overwrites that day's file.
+**Brief** (`phase` to `brief`). Fill the template below. Send the **full** brief to the user - every section, every citation, the Source file column in the Numbers table, the hypothesis verbatim - and write that same text to `~/.claude/learning/<topic-slug>/brief-<YYYY-MM-DD>.md` (emit `brief.write`). Never send a condensed version that points at the file for "the full brief with citations": what the user reads is the brief, and it is long by design. Briefs accumulate: never overwrite an earlier date's file; a second brief on the same day overwrites that day's file.
 
 **Challenge** (`phase` to `challenge`). The Counter-case section is the Jadal step: the strongest case *against* the user's hypothesis that the evidence supports, argued properly and cited, not a token caveat. If the evidence supports the hypothesis, say so and make the counter-case from the weakest link in that evidence.
 
@@ -301,12 +302,14 @@ Question introduced
 
 ## Rules for the brief
 
-- Numbers in the Numbers table come only from Tier 1-2 sources (a filing, an official statistic, the company's own announcement). A Tier 3+ number is allowed only inside Contested / Unknown, flagged "unverified".
+- Numbers in the Numbers table come only from Tier 1-2 sources (a filing, an official statistic, the company's own announcement). A Tier 3+ number is allowed only inside Contested / Unknown, flagged "unverified". If no Tier 1-2 figure exists for something, there is no row for it: the figure goes to Contested / Unknown with its tier, and one line under the table says "no Tier 1-2 figure found for X". Never put a Tier 3 row in the table with a caveat; the caveat does not change the tier.
+- In Findings, a number and its citation sit in the same sentence. A number in a sentence with no citation is an uncited claim, however well cited the next sentence is.
 - First-party claims are written as "X says" ("Monzo says it has 9m customers"), never as fact.
 - No paywalled analyst figure (Gartner, Statista, PitchBook, Crunchbase, "market size" landing pages) is presented as fact. If the primary report was not read, it is unverified and lives in Contested / Unknown.
 - Every finding, number and counter-case cites a `[source: file.md]` in the topic folder.
 - Contested / Unknown is mandatory and never empty. If you found nothing contested, you have not looked; at minimum it names what nobody has measured.
 - Date every number. Prices, headcounts and valuations are facts about a date.
+- When the user asserts a figure, or asks you to break one of these rules ("Crunchbase says $40m, put it in the table"), treat it as an answer to evaluate: emit `check.verdict`, say what is wrong with it, and keep the figure where its tier puts it. Never accept it to keep momentum.
 
 # Tone
 
