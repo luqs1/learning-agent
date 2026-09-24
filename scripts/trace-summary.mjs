@@ -106,6 +106,8 @@ function describe(e) {
       return `memory read    ${d.file} ${d.found ? "(found)" : "(absent)"}`;
     case "memory.write":
       return `memory write   ${d.file}`;
+    case "brief.write":
+      return `brief write    ${d.file}`;
     default:
       return `${e.event.padEnd(14)} ${JSON.stringify(d)}`;
   }
@@ -126,6 +128,8 @@ export function summarise(events) {
     fanouts: events.filter((e) => e.event === "research.fanout").map((e) => (e.data.angles || []).join("+")),
     memory_read: events.filter((e) => e.event === "memory.read").map((e) => `${e.data.file}${e.data.found ? "" : " (absent)"}`),
     memory_written: [...new Set(events.filter((e) => e.event === "memory.write").map((e) => e.data.file))],
+    briefs_written: [...new Set(events.filter((e) => e.event === "brief.write").map((e) => e.data.file))],
+    phases: events.filter((e) => e.event === "phase").map((e) => e.data.to),
   };
 }
 
@@ -151,6 +155,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (const err of errors) console.log(`  line ${err.line}: MALFORMED (${err.error}) ${err.raw.slice(0, 120)}`);
   const s = summarise(events);
   console.log("");
-  console.log(`Summary: ${s.events} events over ${s.duration_s ?? "?"}s; concepts taught: ${s.concepts_taught.join(", ") || "none"}; gate fails: ${s.gate_fails}; files written: ${s.files_written.length}; fan-outs: ${s.fanouts.length}; memory read: ${s.memory_read.join(", ") || "none"}; memory written: ${s.memory_written.join(", ") || "none"}`);
+  console.log(`Summary: ${s.events} events over ${s.duration_s ?? "?"}s; concepts taught: ${s.concepts_taught.join(", ") || "none"}; gate fails: ${s.gate_fails}; files written: ${s.files_written.length}; fan-outs: ${s.fanouts.length}; memory read: ${s.memory_read.join(", ") || "none"}; memory written: ${s.memory_written.join(", ") || "none"}${s.briefs_written.length ? `; briefs written: ${s.briefs_written.join(", ")}` : ""}${s.phases.length ? `; phases: ${s.phases.join(" -> ")}` : ""}`);
   console.log(`Counts: ${Object.entries(s.counts).map(([k, v]) => `${k}=${v}`).join("  ")}`);
 }

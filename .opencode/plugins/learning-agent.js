@@ -8,6 +8,9 @@
  *     learning-researcher subagent - one-angle research worker that the
  *                                    learning-research skill launches three
  *                                    of in parallel through the task tool
+ * - Agent: researcher (primary; the learning prompt plus a mode preamble:
+ *   starts in Research Mode, the equivalent of Claude Code's /research)
+ * - Command: /research <question> (via config.command, runs on researcher)
  */
 
 import path from "path";
@@ -65,6 +68,34 @@ function parseFrontmatter(raw) {
   return { frontmatter: fm, content: match[2] };
 }
 
+// Research mode on opencode. The prompt is the learning agent's prompt; this
+// preamble tells it the session was opened as a researcher, which is the same
+// signal Claude Code's /research command gives (see "Research Mode" in the
+// prompt). Keep it a mode line only: the rules live in the prompt file.
+export const RESEARCHER_PREAMBLE = [
+  "# Mode",
+  "",
+  "You were started as the `researcher` agent. Treat the first user message as a research question and enter Research Mode (defined below) for the whole session. The gauging question - the user's current hypothesis and the evidence they already have for it - still comes first, before any research. Everything else in this prompt applies unchanged.",
+].join("\n");
+
+export const RESEARCHER_AGENT = {
+  description: "Cited research briefs: market size, competitors and their funding, evidence for or against a hypothesis. The learning agent in research mode.",
+  mode: "primary",
+  color: "#D9834A",
+};
+
+export const RESEARCH_COMMAND = {
+  description: "Build a cited research brief on a question (learning agent, research mode)",
+  agent: "researcher",
+  template: [
+    "Enter research mode for this question: $ARGUMENTS",
+    "",
+    "Open with the gauging question - the user's current hypothesis and the evidence they already have for it - before any research. Then read the venture context and the existing knowledge base, plan the sub-questions, research and store, and deliver the brief, the counter-case and the next questions, writing the brief to the topic folder.",
+    "",
+    "If no question was provided, ask what the user wants a brief on.",
+  ].join("\n"),
+};
+
 export const LearningAgentPlugin = async ({ client, directory }) => {
   return {
     // Register skills directory so opencode discovers learning-assessment
@@ -92,6 +123,17 @@ export const LearningAgentPlugin = async ({ client, directory }) => {
           prompt: content.trim(),
           ...(permission ? { permission } : {}),
         };
+      }
+
+      // Research mode: a second primary agent with the learning prompt,
+      // started in research mode. Select it with Tab, or run /research.
+      if (config.agent.learning) {
+        config.agent.researcher = {
+          ...RESEARCHER_AGENT,
+          prompt: `${RESEARCHER_PREAMBLE}\n\n${config.agent.learning.prompt}`,
+        };
+        config.command = config.command || {};
+        config.command.research = { ...RESEARCH_COMMAND };
       }
     },
   };

@@ -19,8 +19,14 @@ const TRACE_EVENTS = [
   "phase",
   "memory.read",
   "memory.write",
+  "brief.write",
   "session.end",
 ];
+
+// Research mode (#9) adds its own phase names to the `phase` event.
+const RESEARCH_PHASES = ["gauge", "plan", "research", "brief", "challenge"];
+// The brief template's section headings, in order.
+export const BRIEF_SECTIONS = ["Question", "Hypothesis", "Findings", "Numbers", "Contested / Unknown", "Counter-case", "Next questions"];
 
 // Wording that would let memory stand in for the opening gauging question.
 // Any line that pairs memory/profile with replacing or skipping the question
@@ -91,7 +97,50 @@ for (const [name, platform] of Object.entries(PLATFORMS)) {
     assert.match(body, /# Session Tracing/);
     assert.ok(body.includes(`${platform.kbPath}/.traces/<topic-slug>/`), "trace path must be under the platform KB root");
     for (const ev of TRACE_EVENTS) assert.ok(body.includes("`" + ev + "`"), `agent prompt does not document trace event ${ev}`);
+    const phaseRow = body.split("\n").find((l) => l.startsWith("| `phase` |")) || "";
+    for (const ph of RESEARCH_PHASES) assert.ok(phaseRow.includes("`" + ph + "`"), `the phase event row does not list the research-mode phase ${ph}`);
     assert.match(body, /LEARNING_KB_ROOT/, "agent prompt must honour the LEARNING_KB_ROOT override");
+  });
+
+  test(`${name}: agent prompt defines research mode with the brief template and its evidence rules`, () => {
+    const body = parseFrontmatter(read(platform.agent)).body;
+    assert.match(body, /# Research Mode/);
+    // The gauging question is the founder variant from Learner Memory, reused verbatim, and pinned as never skipped.
+    const gauge = "What is your current hypothesis, and what evidence do you already have for it?";
+    assert.ok(body.split(gauge).length >= 3, "research mode must reuse the founder gauging question from Learner Memory (expected it at least twice)");
+    const gaugeLine = body.split("\n").find((l) => l.startsWith("**Gauge**")) || "";
+    assert.match(gaugeLine, /never skipped/i, "the Gauge step must say the question is never skipped");
+    assert.match(gaugeLine, /cite nothing/i, "the Gauge step must say the first turn cites nothing");
+    // Plain-session trigger heuristics and the one-line announcement.
+    for (const cue of ["market size", "competitors", "evidence for or against", "what do we know about", "brief me on", "`/research`"]) assert.ok(body.includes(cue), `research-mode trigger cue missing: ${cue}`);
+    assert.match(body, /Say so in one line/);
+    // The flow and its phases.
+    for (const step of ["Gauge (never skipped)", "Plan: decompose into sub-questions", "issue independent searches in one turn", "one entity per file", "Challenge (Jadal)", "Next questions: what would falsify the hypothesis"]) assert.ok(body.includes(step), `research flow step missing: ${step}`);
+    for (const ph of RESEARCH_PHASES) assert.ok(body.includes("`phase` to `" + ph + "`") || ph === "research" || ph === "challenge", `research flow does not emit phase ${ph}`);
+    // Venture context and the latest brief are read; memory is written back.
+    assert.match(body, /Venture context/);
+    assert.match(body, /latest brief-\*\.md|read the latest one/);
+    assert.match(body, /untested \| validated \(<evidence>\) \| falsified \(<evidence>\)/);
+    // The brief file and its trace event.
+    assert.ok(body.includes(`${platform.kbPath}/<topic-slug>/brief-<YYYY-MM-DD>.md`), "the brief must be written under the platform KB root as brief-<YYYY-MM-DD>.md");
+    assert.match(body, /Briefs accumulate/);
+    // The template, section by section, in order.
+    const tpl = body.slice(body.indexOf("## Brief template"), body.indexOf("## Rules for the brief"));
+    let last = -1;
+    for (const s of BRIEF_SECTIONS) {
+      const i = tpl.indexOf(`## ${s}`);
+      assert.ok(i > last, `brief template section '## ${s}' missing or out of order`);
+      last = i;
+    }
+    assert.ok(tpl.includes("| Value | What | Date | Source file | Tier |"), "the Numbers table header must be exactly Value | What | Date | Source file | Tier");
+    assert.match(tpl, /verbatim/);
+    // The evidence rules.
+    assert.match(body, /Numbers in the Numbers table come only from Tier 1-2 sources/);
+    assert.match(body, /Tier 3\+ number is allowed only inside Contested \/ Unknown, flagged "unverified"/);
+    assert.match(body, /First-party claims are written as "X says"/);
+    assert.match(body, /No paywalled analyst figure/);
+    assert.match(body, /Contested \/ Unknown is mandatory and never empty/);
+    assert.match(body, /Every brief ends with exactly one question/);
   });
 
   test(`${name}: skills emit their trace events`, () => {

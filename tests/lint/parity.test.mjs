@@ -2,7 +2,7 @@
 // and fails on any difference other than the documented allowed ones:
 //   1. the knowledge-base path
 //   2. the agent frontmatter keys (claude: name/description/skills; opencode: description/mode/color)
-//   3. the `learn` slash command, which exists only under claude/
+//   3. the `learn` and `research` slash commands, which exist only under claude/
 //   4. `user-invocable: false`, which only the claude skill copies carry
 //   5. `allowed-tools`, which only the claude learning-research copy carries
 //      (it pre-approves its bundled scripts; opencode has no equivalent key)
@@ -70,7 +70,9 @@ test("parity: the file sets of both trees match except for platform-only files",
   assert.deepEqual(claude, opencode, "a file exists in one tree but not the other; mirror it or add it to PLATFORM_ONLY in tests/lib/repo.mjs");
 });
 
-test("parity: the learn slash command exists only under claude/", () => {
-  assert.ok(listFiles("claude").includes("claude/skills/learn/SKILL.md"));
-  assert.ok(!listFiles("opencode").some((f) => f.includes("/learn/")));
+test("parity: the learn and research slash commands exist only under claude/", () => {
+  for (const name of ["learn", "research"]) {
+    assert.ok(listFiles("claude").includes(`claude/skills/${name}/SKILL.md`));
+    assert.ok(!listFiles("opencode").some((f) => f.includes(`/${name}/`)), `opencode has no ${name} command file; the plugin registers research mode in code`);
+  }
 });
