@@ -9,7 +9,7 @@ import { ROOT } from "../../lib/repo.mjs";
 
 export const AGENT_REF = "learning-agent:learning";
 
-export function harnessSystemPrompt({ kbRoot, slug }) {
+export function harnessSystemPrompt({ kbRoot, slug, mode = "teach" }) {
   return [
     "TEST HARNESS NOTE (the learner cannot see this).",
     `The environment variable LEARNING_KB_ROOT is set to "${kbRoot}". Use that directory as the knowledge-base root everywhere the agent prompt and the skills mention the default root:`,
@@ -17,12 +17,13 @@ export function harnessSystemPrompt({ kbRoot, slug }) {
     `- learner profile: ${kbRoot}/learner.md`,
     `- topic progress: ${kbRoot}/${slug}/progress.md`,
     `- session trace: ${kbRoot}/.traces/${slug}/<session-timestamp>.jsonl`,
+    ...(mode === "research" ? [`- research briefs: ${kbRoot}/${slug}/brief-<YYYY-MM-DD>.md`, "This session was opened with the /research command: enter Research Mode for the first message. The gauging question still comes first."] : []),
     `Use the topic slug "${slug}" for this session.`,
     "Otherwise behave exactly as the learning agent prompt specifies. The messages you receive are typed by a real learner.",
   ].join("\n");
 }
 
-export function buildArgs({ sessionId, resume, model, budgetUsd, kbRoot, slug, extraArgs = [] }) {
+export function buildArgs({ sessionId, resume, model, budgetUsd, kbRoot, slug, mode, extraArgs = [] }) {
   const args = [
     "-p",
     "--plugin-dir",
@@ -37,7 +38,7 @@ export function buildArgs({ sessionId, resume, model, budgetUsd, kbRoot, slug, e
     "--add-dir",
     kbRoot,
     "--append-system-prompt",
-    harnessSystemPrompt({ kbRoot, slug }),
+    harnessSystemPrompt({ kbRoot, slug, mode }),
   ];
   if (model) args.push("--model", model);
   if (budgetUsd) args.push("--max-budget-usd", String(budgetUsd));
@@ -49,8 +50,8 @@ export function buildArgs({ sessionId, resume, model, budgetUsd, kbRoot, slug, e
 /**
  * Run one learner turn. Resolves with what the agent did during the turn.
  */
-export function runTurn({ prompt, sessionId, resume, model, budgetUsd, kbRoot, slug, timeoutMs = 20 * 60 * 1000, extraArgs, log = () => {} }) {
-  const args = buildArgs({ sessionId, resume, model, budgetUsd, kbRoot, slug, extraArgs });
+export function runTurn({ prompt, sessionId, resume, model, budgetUsd, kbRoot, slug, mode, timeoutMs = 20 * 60 * 1000, extraArgs, log = () => {} }) {
+  const args = buildArgs({ sessionId, resume, model, budgetUsd, kbRoot, slug, mode, extraArgs });
   const startedAt = Date.now();
   return new Promise((resolve) => {
     const child = spawn("claude", args, {

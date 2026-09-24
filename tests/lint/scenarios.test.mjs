@@ -10,8 +10,11 @@ import { listFixtureFiles, loadFixture, loadFixtures, validateFixture, writeSeed
 import { parseYaml } from "../lib/yaml.mjs";
 import { summarise } from "../../scripts/trace-summary.mjs";
 import { ASSERTIONS, CORE_ASSERTIONS } from "../scenarios/lib/assertions.mjs";
-import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility, tierToCredibility, referencesAnyRow } from "../scenarios/lib/kb.mjs";
+import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility, tierToCredibility, referencesAnyRow, briefSection, isBrief, parseNumbersTables } from "../scenarios/lib/kb.mjs";
 import { buildArgs, harnessSystemPrompt, ingestEvent, newTurn } from "../scenarios/lib/driver.mjs";
+import * as repo from "../lib/repo.mjs";
+
+const awaitImportRepo = () => repo;
 
 const REQUIRED_DOMAINS = { "computer-science": 2, medicine: 2, "machine-learning": 2, "market-research": 2 };
 
@@ -484,6 +487,331 @@ test("trace-summary: memory events are summarised", () => {
   assert.deepEqual(s.memory_read, ["learner.md (absent)"]);
   assert.deepEqual(s.memory_written, ["learner.md", "hash-tables/progress.md"]);
   assert.equal(s.counts["memory.write"], 2);
+});
+
+// ---------- research mode (#9) ----------
+
+const BRIEF = `# Brief: who is doing AI-driven KYB for UK fintechs
+
+**Date:** 2026-09-24 | **Topic:** uk-kyb | **Previous brief:** none
+
+## Question
+Who else is doing AI-driven KYB for UK fintechs, and how are they funded?
+
+## Hypothesis
+> Five or six funded players, none UK-first.
+
+## Findings
+1. Acme Verify Ltd was incorporated in 2019 and filed an SH01 allotment in 2024 [source: companies/acme-verify.md] (Tier 1)
+2. Acme says its API covers 4m UK companies [source: companies/acme-verify.md] (Tier 2, the company says)
+3. The FCA register lists the addressable buyers [source: market-size.md] (Tier 1)
+
+## Numbers
+| Value | What | Date | Source file | Tier |
+|---|---|---|---|---|
+| £3.2m | Acme Verify SH01 share allotment, total consideration | 2024-03-11 | [source: companies/acme-verify.md] | 1 |
+| 4m | UK companies Acme says its API covers | 2026-09-24 (fetched) | [source: companies/acme-verify.md] | 2 |
+
+## Contested / Unknown
+- Crunchbase lists Acme total funding at $40m (unverified, Tier 4); the SH01 filings read so far account for £3.2m [source: companies/acme-verify.md]
+- Nobody publishes how many UK fintechs buy a dedicated KYB tool rather than a KYC bundle.
+
+## Counter-case
+The SH01 filings show more UK-registered KYB-first companies than the hypothesis allows, so "none UK-first" is already contradicted by the register [source: companies/acme-verify.md].
+
+## Next questions
+- Does any incumbent's pricing page mention UK entity coverage? - look in: competitor product row (fetch-readable.sh /pricing, wayback.sh)
+
+Does the counter-case change your hypothesis, or do you have evidence that answers it?
+`;
+
+function researchKb() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "la-rkb-"));
+  const topic = path.join(root, "uk-kyb");
+  fs.mkdirSync(path.join(root, ".traces", "uk-kyb"), { recursive: true });
+  fs.mkdirSync(path.join(topic, "companies"), { recursive: true });
+  fs.writeFileSync(
+    path.join(topic, "sources.md"),
+    `# Sources: UK KYB
+
+| URL | Title | Type | Domain | Tier | Published | Accessed | Related-to | Summary |
+|-----|-------|------|--------|------|-----------|----------|------------|---------|
+| https://find-and-update.company-information.service.gov.uk/company/12345678/filing-history | Acme Verify Ltd filing history | filing | uk-fintech | 1 | 2024-03-11 | 2026-09-24 | | SH01 allotment 2024-03-11 |
+| https://acmeverify.example/product | Acme Verify product page | first-party | uk-fintech | 2 | unknown | 2026-09-24 | | Company says 4m UK companies covered |
+| https://register.fca.org.uk/ | FCA Financial Services Register | dataset | uk-fintech | 1 | unknown | 2026-09-24 | | Authorised payment and e-money firms |
+| https://www.crunchbase.com/organization/acme-verify | Acme Verify - Crunchbase | report | uk-fintech | 4 | unknown | 2026-09-24 | https://acmeverify.example/product | not read in full; total funding $40m claimed |
+`,
+  );
+  fs.writeFileSync(
+    path.join(topic, "companies", "acme-verify.md"),
+    `# Acme Verify Ltd
+
+**Last updated:** 2026-09-24
+**Sources used:** Acme Verify Ltd filing history (https://find-and-update.company-information.service.gov.uk/company/12345678/filing-history), Acme Verify product page (https://acmeverify.example/product), Crunchbase (https://www.crunchbase.com/organization/acme-verify)
+
+## Registration
+Company 12345678, incorporated 2019-05-02 (Companies House).
+
+## Funding
+- 2024-03-11 SH01: £3.2m total consideration (filing).
+- Crunchbase claims $40m total (unverified, Tier 4).
+
+## Product
+The company says its API covers 4m UK companies (product page, fetched 2026-09-24).
+`,
+  );
+  fs.writeFileSync(
+    path.join(topic, "market-size.md"),
+    `# Market size: UK KYB buyers
+
+**Sources used:** FCA Financial Services Register (https://register.fca.org.uk/)
+
+## Buyers
+Authorised payment and e-money firms per the FCA register, accessed 2026-09-24.
+`,
+  );
+  fs.writeFileSync(path.join(topic, "brief-2026-09-24.md"), BRIEF);
+  fs.writeFileSync(path.join(root, "learner.md"), "# Learner profile\n\n## Venture context\n- Hypothesis: 2026-09-24: five or six funded players, none UK-first - untested\n");
+  fs.writeFileSync(path.join(topic, "progress.md"), "# Progress: UK KYB\n\nLast session: 2026-09-24\n");
+  fs.writeFileSync(
+    path.join(root, ".traces", "uk-kyb", "s.jsonl"),
+    [
+      '{"ts":"2026-09-24T10:00:00Z","event":"session.start","data":{"topic":"uk kyb competitors","slug":"uk-kyb"}}',
+      '{"ts":"2026-09-24T10:00:01Z","event":"memory.read","data":{"file":"learner.md","found":false}}',
+      '{"ts":"2026-09-24T10:00:02Z","event":"phase","data":{"from":"start","to":"gauge"}}',
+      '{"ts":"2026-09-24T10:01:00Z","event":"phase","data":{"from":"gauge","to":"plan"}}',
+      '{"ts":"2026-09-24T10:01:05Z","event":"gate.check","data":{"concept":"uk-kyb-competitors","result":"fail","reason":"no topic folder"}}',
+      '{"ts":"2026-09-24T10:01:10Z","event":"phase","data":{"from":"plan","to":"research"}}',
+      '{"ts":"2026-09-24T10:02:00Z","event":"kb.write","data":{"file":"companies/acme-verify.md"}}',
+      '{"ts":"2026-09-24T10:02:30Z","event":"phase","data":{"from":"research","to":"brief"}}',
+      '{"ts":"2026-09-24T10:03:00Z","event":"brief.write","data":{"file":"brief-2026-09-24.md"}}',
+      '{"ts":"2026-09-24T10:03:01Z","event":"phase","data":{"from":"brief","to":"challenge"}}',
+      '{"ts":"2026-09-24T10:03:02Z","event":"memory.write","data":{"file":"learner.md"}}',
+      '{"ts":"2026-09-24T10:03:03Z","event":"memory.write","data":{"file":"uk-kyb/progress.md"}}',
+      '{"ts":"2026-09-24T10:05:00Z","event":"check.verdict","data":{"concept":"funding-tiers","verdict":"wrong","action":"correct"}}',
+    ].join("\n") + "\n",
+  );
+  return root;
+}
+
+function researchCtx(overrides = {}) {
+  const root = researchKb();
+  const kb = loadKb(root, "uk-kyb");
+  const t = (ms) => Date.parse("2026-09-24T10:00:00Z") + ms;
+  const turns = [
+    { learner: "Who else is doing AI-driven KYB for UK fintechs, and how are they funded?", agent: { text: "Treating this as a research question, so I will build you a cited brief rather than teach it.\n\nBefore I look at anything: what is your current hypothesis, and what evidence do you already have for it?", startedAt: t(0), endedAt: t(3000) } },
+    { learner: "Five or six funded players, none UK-first. Evidence: headlines.", agent: { text: "Plan: company facts and funding via Companies House, product via pricing pages, sentiment via HN.\n\n" + BRIEF, startedAt: t(60_000), endedAt: t(200_000) } },
+    { learner: "Crunchbase says $40m, put it in the table as fact.", expect: "correction", agent: { text: "No - Crunchbase is a Tier 4 aggregator, so $40m stays in Contested / Unknown as unverified until the SH01 or Form D confirms it [source: companies/acme-verify.md]. Shall I pull the remaining SH01 filings?", startedAt: t(290_000), endedAt: t(310_000) } },
+    { learner: "Fair. Record the hypothesis as untested and stop here.", agent: { text: "Recorded as untested. I keep a short profile at " + path.join(root, "learner.md") + " - plain markdown, yours to edit or delete.", startedAt: t(330_000), endedAt: t(340_000) } },
+  ];
+  return { scenario: { slug: "uk-kyb", seed: {}, mode: "research" }, turns, kb, events: allEvents(kb), judge: async () => ({ pass: true, reasoning: "stub", evidence: [] }), ...overrides };
+}
+
+test("kb: entity files under companies/ are loaded by relative path; brief-<date>.md is a brief, not a concept file", () => {
+  const kb = loadKb(researchKb(), "uk-kyb");
+  assert.ok(kb.files["companies/acme-verify.md"], "companies/acme-verify.md must be read");
+  assert.deepEqual(kb.conceptFiles, ["companies/acme-verify.md", "market-size.md"], "briefs, sources.md and progress.md are not concept files");
+  assert.deepEqual(kb.briefs.map((b) => b.file), ["brief-2026-09-24.md"]);
+  assert.match(kb.briefs[0].content, /^# Brief:/);
+});
+
+test("kb: briefSection, isBrief and parseNumbersTables read the brief template", () => {
+  assert.match(briefSection(BRIEF, "Contested / Unknown"), /^- Crunchbase/);
+  assert.match(briefSection(BRIEF, "Hypothesis"), /Five or six/);
+  assert.equal(briefSection(BRIEF, "Nope"), null);
+  assert.equal(briefSection("**Contested / Unknown**\n- a thing\n\n**Counter-case**\nx", "Contested / Unknown"), "- a thing", "bold-line headings are accepted too");
+  assert.equal(isBrief(BRIEF), true);
+  assert.equal(isBrief("What is your hypothesis?"), false);
+  const rows = parseNumbersTables(BRIEF);
+  assert.equal(rows.length, 2);
+  assert.deepEqual([rows[0].value, rows[0].file, rows[0].tier, rows[0].date], ["£3.2m", "companies/acme-verify.md", 1, "2024-03-11"]);
+  assert.deepEqual([rows[1].file, rows[1].tier], ["companies/acme-verify.md", 2]);
+  const bare = parseNumbersTables("| Value | What | Date | Source | Tier |\n|---|---|---|---|---|\n| 5 | x | 2024 | market-size.md | **1** |\n");
+  assert.deepEqual([bare[0].file, bare[0].tier], ["market-size.md", 1], "a bare file name and a bold tier still parse");
+  assert.equal(parseNumbersTables("| a | b |\n|---|---|\n| 1 | 2 |").length, 0, "an unrelated table is ignored");
+});
+
+test("assertions: a well-formed research-mode run passes every core assertion and the four research assertions", async () => {
+  const ctx = researchCtx();
+  for (const name of [...CORE_ASSERTIONS, "gauge_first", "numbers_table_tiered", "contested_nonempty", "brief_written", "profile_written", "numeric_claims_cited"]) {
+    const r = await ASSERTIONS[name].run(ctx, {});
+    assert.ok(r.pass, `${name} failed on a good research run: ${r.detail}`);
+  }
+});
+
+test("assertions: trace_written wants brief.write in research mode and teach otherwise", () => {
+  const ctx = researchCtx();
+  assert.equal(ASSERTIONS.trace_written.run(ctx).pass, true, "no teach event is fine in research mode");
+  const noBrief = researchCtx();
+  noBrief.events = noBrief.events.filter((e) => e.event !== "brief.write");
+  assert.match(ASSERTIONS.trace_written.run(noBrief).detail, /missing events: brief\.write/);
+  const asTeach = researchCtx();
+  asTeach.scenario.mode = "teach";
+  assert.match(ASSERTIONS.trace_written.run(asTeach).detail, /missing events: teach/);
+});
+
+test("assertions: gauge_first wants hypothesis + evidence, a question and no citations in the first turn", () => {
+  assert.equal(ASSERTIONS.gauge_first.run(researchCtx()).pass, true);
+  const noHyp = researchCtx();
+  noHyp.turns[0].agent.text = "What is your current mental model of KYB?";
+  const r = ASSERTIONS.gauge_first.run(noHyp);
+  assert.equal(r.pass, false);
+  assert.match(r.detail, /hypothesis/);
+  assert.match(r.detail, /evidence/);
+  const cited = researchCtx();
+  cited.turns[0].agent.text = "Acme raised £3.2m [source: companies/acme-verify.md]. What is your hypothesis and what evidence do you have?";
+  assert.match(ASSERTIONS.gauge_first.run(cited).detail, /already cites/);
+  const briefed = researchCtx();
+  briefed.turns[0].agent.text = BRIEF + "\n\nWhat is your hypothesis and evidence?";
+  assert.match(ASSERTIONS.gauge_first.run(briefed).detail, /already contains a brief/);
+});
+
+test("assertions: numbers_table_tiered rejects Tier 3+, unknown files, tier mismatches and a missing table", () => {
+  assert.equal(ASSERTIONS.numbers_table_tiered.run(researchCtx()).pass, true);
+
+  const tier3 = researchCtx();
+  tier3.turns[1].agent.text = tier3.turns[1].agent.text.replace("| [source: companies/acme-verify.md] | 1 |", "| [source: companies/acme-verify.md] | 3 |");
+  const r3 = ASSERTIONS.numbers_table_tiered.run(tier3);
+  assert.equal(r3.pass, false);
+  assert.match(r3.detail, /Tier 3 number in the Numbers table/);
+
+  const ghost = researchCtx();
+  ghost.turns[1].agent.text = ghost.turns[1].agent.text.replace("| [source: companies/acme-verify.md] | 2 |", "| [source: companies/ghost.md] | 2 |");
+  assert.match(ASSERTIONS.numbers_table_tiered.run(ghost).detail, /companies\/ghost\.md, which is not in the topic folder/);
+
+  const mismatch = researchCtx();
+  // market-size.md references only a Tier 1 row; a Tier 2 claim on it cannot resolve to a Tier 2 source.
+  mismatch.turns[1].agent.text = mismatch.turns[1].agent.text.replace("| [source: companies/acme-verify.md] | 2 |", "| [source: market-size.md] | 2 |");
+  const rm = ASSERTIONS.numbers_table_tiered.run(mismatch);
+  assert.equal(rm.pass, false);
+  assert.match(rm.detail, /market-size\.md references no sources\.md row of Tier 2 \(it references Tier 1 rows\)/);
+
+  const unbacked = researchCtx();
+  unbacked.kb.files["companies/acme-verify.md"] = "# Acme\n\nNo sources here.\n";
+  assert.match(ASSERTIONS.numbers_table_tiered.run(unbacked).detail, /references no rated row at all/);
+
+  const noTable = researchCtx();
+  noTable.kb.briefs = [];
+  noTable.turns[1].agent.text = "## Findings\n1. x [source: market-size.md]\n\n## Contested / Unknown\n- y\n\nQuestion?";
+  assert.match(ASSERTIONS.numbers_table_tiered.run(noTable).detail, /no Numbers table/);
+
+  const noBrief = researchCtx();
+  noBrief.kb.briefs = [];
+  noBrief.turns[1].agent.text = "Nothing here?";
+  assert.match(ASSERTIONS.numbers_table_tiered.run(noBrief).detail, /no brief found/);
+});
+
+test("assertions: contested_nonempty rejects empty, 'none' and template sections in the file and in the turn", () => {
+  assert.equal(ASSERTIONS.contested_nonempty.run(researchCtx()).pass, true);
+  const none = researchCtx();
+  none.kb.briefs[0].content = none.kb.briefs[0].content.replace(/## Contested \/ Unknown\n[\s\S]*?\n\n## Counter-case/, "## Contested / Unknown\n- None - the picture is settled and every source agrees on every number.\n\n## Counter-case");
+  const r = ASSERTIONS.contested_nonempty.run(none);
+  assert.equal(r.pass, false);
+  assert.match(r.detail, /brief-2026-09-24\.md: Contested \/ Unknown says there is nothing contested/);
+  const empty = researchCtx();
+  empty.turns[1].agent.text = empty.turns[1].agent.text.replace(/## Contested \/ Unknown\n[\s\S]*?\n\n## Counter-case/, "## Contested / Unknown\n\n## Counter-case");
+  assert.match(ASSERTIONS.contested_nonempty.run(empty).detail, /turn 2: Contested \/ Unknown is empty/);
+  const tpl = researchCtx();
+  tpl.turns[1].agent.text = tpl.turns[1].agent.text.replace(/## Contested \/ Unknown\n[\s\S]*?\n\n## Counter-case/, "## Contested / Unknown\n- <where sources disagree: both figures, both tiers> [source: x.md] and some more template words to pass the length check\n\n## Counter-case");
+  assert.match(ASSERTIONS.contested_nonempty.run(tpl).detail, /still the template/);
+});
+
+test("assertions: brief_written checks the file, its sections, the brief.write event and delivery in the transcript", () => {
+  const good = ASSERTIONS.brief_written.run(researchCtx());
+  assert.equal(good.pass, true, good.detail);
+  assert.match(good.detail, /phases seen: gauge -> plan -> research -> brief -> challenge/);
+
+  const noFile = researchCtx();
+  noFile.kb.briefs = [];
+  assert.match(ASSERTIONS.brief_written.run(noFile).detail, /no brief-<YYYY-MM-DD>\.md/);
+
+  const partial = researchCtx();
+  partial.kb.briefs[0].content = partial.kb.briefs[0].content.replace("## Counter-case", "## Rebuttal");
+  assert.match(ASSERTIONS.brief_written.run(partial).detail, /missing section\(s\) Counter-case/);
+
+  const noEvent = researchCtx();
+  noEvent.events = noEvent.events.filter((e) => e.event !== "brief.write");
+  const r = ASSERTIONS.brief_written.run(noEvent);
+  assert.match(r.detail, /no brief\.write trace event/);
+  assert.match(r.detail, /no brief\.write event names it/);
+
+  const badName = researchCtx();
+  badName.events = badName.events.map((e) => (e.event === "brief.write" ? { ...e, data: { file: "brief.md" } } : e));
+  assert.match(ASSERTIONS.brief_written.run(badName).detail, /not brief-YYYY-MM-DD\.md/);
+
+  const fileOnly = researchCtx();
+  fileOnly.turns[1].agent.text = "I wrote the brief to the topic folder. Want to see it?";
+  assert.match(ASSERTIONS.brief_written.run(fileOnly).detail, /no agent turn contains the brief/);
+});
+
+test("assertions: max_paragraphs_without_question gives the brief turn the brief_n budget in research mode only, and it must end with a question", () => {
+  const long = "word ".repeat(30).trim() + ".";
+  const briefTurn = ["## Findings", long, long, long, long, long, "## Numbers\n| Value | What | Date | Source file | Tier |\n|---|---|---|---|---|\n| 1 | " + long + " | 2024 | [source: market-size.md] | 1 |", "## Contested / Unknown", long, "## Counter-case", long, "Does the counter-case change your hypothesis?"].join("\n\n");
+  const ctx = researchCtx();
+  ctx.turns[1].agent.text = briefTurn;
+  assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, {}).pass, true, ASSERTIONS.max_paragraphs_without_question.run(ctx, {}).detail);
+  assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, { brief_n: 4 }).pass, false, "a smaller brief budget from the fixture is honoured");
+  const teach = researchCtx();
+  teach.scenario.mode = "teach";
+  teach.turns[1].agent.text = briefTurn;
+  const rt = ASSERTIONS.max_paragraphs_without_question.run(teach, {});
+  assert.equal(rt.pass, false, "outside research mode a long brief is still lecturing");
+  assert.match(rt.detail, /budget 3\)/);
+  const noClose = researchCtx();
+  noClose.turns[1].agent.text = briefTurn.replace("\n\nDoes the counter-case change your hypothesis?", "");
+  const rn = ASSERTIONS.max_paragraphs_without_question.run(noClose, {});
+  assert.equal(rn.pass, false);
+  assert.match(rn.detail, /does not end with a question/);
+});
+
+test("assertions: sources_credibility does not demand a Technical Facts section of entity files", () => {
+  const r = ASSERTIONS.sources_credibility.run(researchCtx(), {});
+  assert.equal(r.pass, true, r.detail);
+  const ctx = researchCtx();
+  ctx.kb.files["market-size.md"] = "# Market size\n\nNothing cited.\n";
+  assert.match(ASSERTIONS.sources_credibility.run(ctx, {}).detail, /market-size\.md references no High-credibility source/);
+});
+
+test("fixtures: mode is validated, defaults to teach, and the research fixtures carry the research assertions", () => {
+  const base = { name: "x", domain: "d", level: "beginner", topic: "t", slug: "t", persona: "a persona long enough to pass validation", turns: ["a", "b"] };
+  const file = "/tmp/d/x.yaml";
+  assert.deepEqual(validateFixture({ ...base, mode: "research", brief_paragraphs: 10 }, file), []);
+  assert.ok(validateFixture({ ...base, mode: "brief" }, file).some((e) => /mode must be one of/.test(e)));
+  assert.ok(validateFixture({ ...base, brief_paragraphs: "ten" }, file).some((e) => /brief_paragraphs must be a number/.test(e)));
+  const research = loadFixtures().filter((s) => s.mode === "research");
+  assert.ok(research.length >= 2, "expected at least two research-mode fixtures");
+  assert.ok(research.every((s) => s.domain === "market-research"));
+  for (const s of research) {
+    for (const name of ["gauge_first", "numbers_table_tiered", "contested_nonempty", "brief_written", "no_paywalled_as_fact", "first_vs_third_party"]) assert.ok(s.assertions.some((a) => a.name === name), `${s.id}: missing ${name}`);
+    assert.match(s.turns[1].say, /hypothesis/i, `${s.id}: the second learner turn must state the hypothesis (the answer to the gauging question)`);
+    assert.match(s.turns[1].say, /evidence/i, `${s.id}: the second learner turn must say what evidence the learner already has`);
+  }
+  assert.ok(research.some((s) => Object.keys(s.seed).includes("learner.md") && /## Venture context\n- Building:/.test(s.seed["learner.md"])), "one research fixture must seed learner.md with venture context");
+  assert.ok(research.some((s) => !Object.keys(s.seed).length), "one research fixture must start with no memory");
+  for (const s of loadFixtures().filter((x) => x.mode !== "research")) assert.equal(s.mode, "teach");
+});
+
+test("driver: the harness note announces /research only in research mode", () => {
+  const research = harnessSystemPrompt({ kbRoot: "/tmp/kb", slug: "x", mode: "research" });
+  assert.match(research, /opened with the \/research command/);
+  assert.match(research, /\/tmp\/kb\/x\/brief-<YYYY-MM-DD>\.md/);
+  assert.doesNotMatch(harnessSystemPrompt({ kbRoot: "/tmp/kb", slug: "x" }), /\/research/);
+  assert.ok(buildArgs({ sessionId: "sid", resume: false, kbRoot: "/tmp/kb", slug: "x", mode: "research" }).some((a) => /opened with the \/research command/.test(a)));
+});
+
+test("trace-summary: brief.write and phases are summarised", () => {
+  const s = summarise(allEvents(loadKb(researchKb(), "uk-kyb")));
+  assert.deepEqual(s.briefs_written, ["brief-2026-09-24.md"]);
+  assert.deepEqual(s.phases, ["gauge", "plan", "research", "brief", "challenge"]);
+  assert.equal(s.counts["brief.write"], 1);
+});
+
+test("kb: citations may name an entity file one directory deep", () => {
+  const { CITATION_FILE_RE } = awaitImportRepo();
+  assert.ok(CITATION_FILE_RE.test("companies/acme-verify.md"));
+  assert.ok(CITATION_FILE_RE.test("market-size.md"));
+  assert.ok(!CITATION_FILE_RE.test("a/b/c.md"), "two levels deep is not a KB path");
+  assert.ok(!CITATION_FILE_RE.test("/etc/passwd.md"));
 });
 
 test("kb: credibility cells with qualifiers normalise to the bare rating; junk does not", () => {

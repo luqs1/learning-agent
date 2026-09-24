@@ -15,7 +15,7 @@
 // a fixture's `assertions:` list. CORE_ASSERTIONS run for every scenario.
 
 import { CITATION_FILE_RE } from "../../lib/repo.mjs";
-import { CREDIBILITY, extractCitations, isDated, paragraphs, referencesAnyRow, sectionOf } from "./kb.mjs";
+import { BRIEF_FILE_RE, CREDIBILITY, ENTITY_FILE_RE, briefSection, extractCitations, isBrief, isDated, paragraphs, parseNumbersTables, referencesAnyRow, sectionOf } from "./kb.mjs";
 import { filesForJudge, transcriptForJudge } from "./judge.mjs";
 
 const TRACE_TOLERANCE_MS = 2000;
@@ -37,6 +37,25 @@ function hasQuestion(text) {
 
 const DATE_RE = /\b\d{4}-\d{2}-\d{2}\b/;
 
+function isResearch(ctx) {
+  return ctx.scenario.mode === "research";
+}
+
+/** The last substantive paragraph of a turn (outside code fences) asks the learner something. */
+function endsWithQuestion(text) {
+  const ps = paragraphs(text.replace(/```[\s\S]*?```/g, "")).filter((p) => p.trim());
+  return ps.length > 0 && hasQuestion(ps[ps.length - 1]);
+}
+
+/** Every brief in a run: the files written to the topic folder plus every agent turn that carries one. */
+function briefsOf(ctx) {
+  const out = ctx.kb.briefs.map((b) => ({ where: b.file, text: b.content }));
+  ctx.turns.forEach((t, i) => {
+    if (isBrief(t.agent.text)) out.push({ where: `turn ${i + 1}`, text: t.agent.text });
+  });
+  return out;
+}
+
 /** Transcript for a judge with the deliberately wrong learner turns labelled. */
 function transcriptWithExpectations(turns) {
   return turns
@@ -46,13 +65,14 @@ function transcriptWithExpectations(turns) {
 
 export const ASSERTIONS = {
   trace_written: {
-    describe: "the agent wrote a well-formed JSONL trace with session.start under <kb>/.traces/<slug>/",
+    describe: "the agent wrote a well-formed JSONL trace with session.start under <kb>/.traces/<slug>/ (research mode: brief.write instead of teach)",
     run(ctx) {
       const traces = ctx.kb.traces;
       if (!traces.length) return { pass: false, detail: `no *.jsonl under ${ctx.kb.root}/.traces` };
       const malformed = traces.flatMap((t) => t.errors.map((e) => `${t.file}:${e.line} ${e.error}`));
       const names = new Set(ctx.events.map((e) => e.event));
-      const missing = ["session.start", "gate.check", "teach"].filter((n) => !names.has(n));
+      const required = ["session.start", "gate.check", isResearch(ctx) ? "brief.write" : "teach"];
+      const missing = required.filter((n) => !names.has(n));
       const inSlugDir = traces.some((t) => t.file.includes(`/.traces/${ctx.scenario.slug}/`));
       const problems = [];
       if (malformed.length) problems.push(`${malformed.length} malformed line(s): ${malformed.slice(0, 3).join("; ")}`);
@@ -155,17 +175,22 @@ FAIL if you find at least one non-trivial factual claim about the topic with no 
       for (const f of ctx.kb.conceptFiles) {
         const md = ctx.kb.files[f];
         if (!referencesAnyRow(md, high).length) problems.push(`${f} references no High-credibility source (by URL or title)`);
-        if (!sectionOf(md, /technical facts/i)) problems.push(`${f} has no 'Technical Facts' section`);
+        // Market-research entity files (companies/<slug>.md, market-size.md, ...) follow the entity layout, not the concept template.
+        if (!ENTITY_FILE_RE.test(f) && !sectionOf(md, /technical facts/i)) problems.push(`${f} has no 'Technical Facts' section`);
       }
       return { pass: problems.length === 0, detail: problems.join(" | ") || `${rows.length} source row(s), ${high.length} High; ${ctx.kb.conceptFiles.length} concept file(s) all backed by a primary source` };
     },
   },
 
   max_paragraphs_without_question: {
-    describe: "no agent turn runs more than N consecutive substantive paragraphs (>= min_words) without asking the learner something",
-    run(ctx, { n = 3, min_words = 25 } = {}) {
+    describe: "no agent turn runs more than N consecutive substantive paragraphs (>= min_words) without asking the learner something; in research mode a brief turn gets the brief_n budget and must still end with a question",
+    run(ctx, { n = 3, min_words = 25, brief_n = 12 } = {}) {
       const problems = [];
+      let briefTurns = 0;
       ctx.turns.forEach((t, i) => {
+        const brief = isResearch(ctx) && isBrief(t.agent.text);
+        const budget = brief ? brief_n : n;
+        if (brief) briefTurns++;
         let streak = 0;
         let worst = 0;
         for (const p of paragraphs(t.agent.text)) {
@@ -178,9 +203,11 @@ FAIL if you find at least one non-trivial factual claim about the topic with no 
           streak += 1;
           worst = Math.max(worst, streak);
         }
-        if (worst > n) problems.push(`turn ${i + 1}: ${worst} consecutive paragraphs without a question`);
+        if (worst > budget) problems.push(`turn ${i + 1}: ${worst} consecutive paragraphs without a question (budget ${budget}${brief ? ", brief turn" : ""})`);
+        if (brief && !endsWithQuestion(t.agent.text)) problems.push(`turn ${i + 1}: the brief does not end with a question to the learner`);
       });
-      return { pass: problems.length === 0, detail: problems.join(" | ") || `no turn exceeds ${n} paragraphs without a question` };
+      const budgetNote = isResearch(ctx) ? `${n} paragraphs (brief turns: ${brief_n}, ${briefTurns} found)` : `${n} paragraphs`;
+      return { pass: problems.length === 0, detail: problems.join(" | ") || `no turn exceeds ${budgetNote} without a question` };
     },
   },
 
@@ -393,6 +420,110 @@ FAIL if any of (a), (b) or (c) is violated. Quote the decisive sentences.`;
       const j = await ctx.judge({ name: "profile_not_trusted", rubric, material });
       const pass = j.pass && problems.length === 0;
       return { ...j, pass, detail: [...problems, `judge ${j.pass ? "pass" : "FAIL"}: ${(j.reasoning || "").slice(0, 160)}`].join(" | ") };
+    },
+  },
+
+  // ---------- research mode (#9) ----------
+
+  gauge_first: {
+    describe: "research mode: the first agent turn asks for the learner's hypothesis and the evidence they already have, and cites nothing",
+    run(ctx) {
+      const first = ctx.turns[0]?.agent.text || "";
+      const body = first.replace(/```[\s\S]*?```/g, "");
+      const problems = [];
+      if (!hasQuestion(body)) problems.push("no question in the first turn");
+      if (!/hypothes/i.test(body)) problems.push("the first turn does not ask for a hypothesis");
+      if (!/evidence/i.test(body)) problems.push("the first turn does not ask what evidence the learner already has");
+      const cites = extractCitations(first);
+      if (cites.length) problems.push(`the first turn already cites ${cites.length} source(s): it researched before gauging`);
+      if (parseNumbersTables(first).length || isBrief(first)) problems.push("the first turn already contains a brief");
+      return { pass: problems.length === 0, detail: problems.join(" | ") || "first turn asks for hypothesis and evidence, cites nothing" };
+    },
+  },
+
+  numbers_table_tiered: {
+    describe: "research mode: every row of every Numbers table (Value | What | Date | Source file | Tier) has Tier 1 or 2, cites a real file, and that file references a sources.md row of that tier",
+    run(ctx) {
+      const rows = ctx.kb.sources || [];
+      const problems = [];
+      let checked = 0;
+      const briefs = briefsOf(ctx);
+      if (!briefs.length) return { pass: false, detail: "no brief found (no brief-<date>.md in the topic folder and no agent turn with a Contested / Unknown section)" };
+      for (const b of briefs) {
+        const table = parseNumbersTables(b.text);
+        if (!table.length) {
+          problems.push(`${b.where}: no Numbers table (| Value | What | Date | Source file | Tier |)`);
+          continue;
+        }
+        for (const r of table) {
+          checked++;
+          const label = `${b.where}: "${r.value}" (${r.what.slice(0, 40)})`;
+          if (r.tier === null) problems.push(`${label}: Tier cell is not 1-5: "${r.raw.split("|").at(-2)?.trim()}"`);
+          else if (r.tier > 2) problems.push(`${label}: Tier ${r.tier} number in the Numbers table (only Tier 1-2 allowed; Tier 3+ belongs in Contested / Unknown)`);
+          if (!r.date.trim()) problems.push(`${label}: no date`);
+          if (!r.file) {
+            problems.push(`${label}: Source file cell does not name a .md file: "${r.sourceCell}"`);
+            continue;
+          }
+          const md = ctx.kb.files[r.file];
+          if (!md) {
+            problems.push(`${label}: cites ${r.file}, which is not in the topic folder`);
+            continue;
+          }
+          if (r.tier !== null && r.tier <= 2) {
+            const backing = referencesAnyRow(md, rows.filter((s) => Number(s.tier) === r.tier));
+            if (!backing.length) {
+              const any = referencesAnyRow(md, rows.filter((s) => /^[1-5]$/.test(String(s.tier))));
+              problems.push(`${label}: ${r.file} references no sources.md row of Tier ${r.tier}${any.length ? ` (it references Tier ${[...new Set(any.map((s) => s.tier))].join("/")} rows)` : " (it references no rated row at all)"}`);
+            }
+          }
+        }
+      }
+      const unique = [...new Set(problems)];
+      return { pass: unique.length === 0, detail: unique.slice(0, 8).join(" | ") || `${checked} Numbers row(s) across ${briefs.length} brief(s), all Tier 1-2 and backed by a sources.md row of that tier` };
+    },
+  },
+
+  contested_nonempty: {
+    describe: "research mode: every brief has a Contested / Unknown section with real content (not empty, not 'none', not the template)",
+    run(ctx, { min_chars = 60 } = {}) {
+      const briefs = briefsOf(ctx);
+      if (!briefs.length) return { pass: false, detail: "no brief found" };
+      const problems = [];
+      for (const b of briefs) {
+        const sec = briefSection(b.text, "Contested / Unknown");
+        if (sec === null) problems.push(`${b.where}: no Contested / Unknown section`);
+        else {
+          const flat = sec.replace(/\s+/g, " ").trim();
+          if (flat.length < min_chars) problems.push(`${b.where}: Contested / Unknown is empty or too short (${flat.length} chars)`);
+          else if (/^[-*]?\s*(none|n\/a|nothing|no contested)/i.test(flat)) problems.push(`${b.where}: Contested / Unknown says there is nothing contested`);
+          else if (/^[-*]?\s*<where sources disagree/i.test(flat)) problems.push(`${b.where}: Contested / Unknown is still the template`);
+        }
+      }
+      return { pass: problems.length === 0, detail: problems.join(" | ") || `${briefs.length} brief(s), all with a populated Contested / Unknown section` };
+    },
+  },
+
+  brief_written: {
+    describe: "research mode: a brief-<YYYY-MM-DD>.md with every template section exists in the topic folder, a brief.write trace event names it, and the transcript delivered the same brief",
+    run(ctx, { sections = ["Question", "Hypothesis", "Findings", "Numbers", "Contested / Unknown", "Counter-case", "Next questions"] } = {}) {
+      const problems = [];
+      const briefs = ctx.kb.briefs;
+      if (!briefs.length) problems.push(`no brief-<YYYY-MM-DD>.md in ${ctx.kb.topicDir || "(no topic dir)"}`);
+      for (const b of briefs) {
+        const missing = sections.filter((s) => briefSection(b.content, s) === null);
+        if (missing.length) problems.push(`${b.file}: missing section(s) ${missing.join(", ")}`);
+        if (!(briefSection(b.content, "Hypothesis") || "").trim()) problems.push(`${b.file}: Hypothesis section is empty (the learner's hypothesis must be quoted)`);
+        if (!extractCitations(b.content).length) problems.push(`${b.file}: no [source: x.md] citation in the brief`);
+      }
+      const writes = ctx.events.filter((e) => e.event === "brief.write").map((e) => String(e.data.file || ""));
+      if (!writes.length) problems.push("no brief.write trace event");
+      for (const b of briefs) if (!writes.some((w) => w.endsWith(b.file))) problems.push(`${b.file} exists but no brief.write event names it`);
+      for (const w of writes) if (!BRIEF_FILE_RE.test(w.split("/").pop())) problems.push(`brief.write names "${w}", not brief-YYYY-MM-DD.md`);
+      if (!ctx.turns.some((t) => isBrief(t.agent.text))) problems.push("no agent turn contains the brief (it must be sent to the learner, not only written to the file)");
+      const phases = ctx.events.filter((e) => e.event === "phase").map((e) => e.data.to);
+      const note = `phases seen: ${phases.join(" -> ") || "none"}`;
+      return { pass: problems.length === 0, detail: problems.join(" | ") || `${briefs.map((b) => b.file).join(", ")} written with all ${sections.length} sections, ${writes.length} brief.write event(s); ${note}` };
     },
   },
 };

@@ -21,6 +21,13 @@
 //                content, written into LEARNING_KB_ROOT before the first turn
 //                (e.g. learner.md, <slug>/progress.md) to simulate a returning
 //                learner. Paths are relative, no `..`, no leading `/` or `.`.
+//   mode:        teach (default) | research. `research` means the session is
+//                opened as /research would open it (the harness note says so);
+//                trace_written expects brief.write instead of teach, and the
+//                brief turn gets the larger paragraph budget in
+//                max_paragraphs_without_question (see brief_paragraphs).
+//   brief_paragraphs: paragraph budget for the brief turn in research mode
+//                (default 12; the turn must still end with a question).
 //   model, judge_model, max_paragraphs, budget_usd: optional overrides.
 
 import fs from "node:fs";
@@ -32,6 +39,7 @@ import { ASSERTIONS, CORE_ASSERTIONS } from "./assertions.mjs";
 export const SCENARIO_DIR = path.join(ROOT, "tests", "scenarios");
 export const LEVELS = ["beginner", "intermediate", "advanced"];
 export const EXPECTATIONS = ["correction", "advance"];
+export const MODES = ["teach", "research"];
 
 export function listFixtureFiles() {
   const out = [];
@@ -88,9 +96,10 @@ export function validateFixture(doc, file) {
       });
     }
   }
-  for (const key of ["max_paragraphs", "budget_usd"]) {
+  for (const key of ["max_paragraphs", "brief_paragraphs", "budget_usd"]) {
     if (doc[key] !== undefined && typeof doc[key] !== "number") errors.push(`${key} must be a number`);
   }
+  if (doc.mode !== undefined && !MODES.includes(doc.mode)) errors.push(`mode must be one of ${MODES.join(", ")}`);
   if (doc.seed !== undefined) errors.push(...validateSeed(doc.seed));
   return errors;
 }
@@ -129,12 +138,14 @@ function normalise(doc, file) {
     if (CORE_ASSERTIONS.includes(a.name)) Object.assign(assertions.find((x) => x.name === a.name), a);
   }
   if (doc.max_paragraphs !== undefined) assertions.find((a) => a.name === "max_paragraphs_without_question").n = doc.max_paragraphs;
+  if (doc.brief_paragraphs !== undefined) assertions.find((a) => a.name === "max_paragraphs_without_question").brief_n = doc.brief_paragraphs;
   return {
     file,
     id: `${doc.domain}/${doc.name}`,
     name: doc.name,
     domain: doc.domain,
     level: doc.level,
+    mode: doc.mode || "teach",
     topic: doc.topic.trim(),
     slug: doc.slug,
     persona: doc.persona.trim(),

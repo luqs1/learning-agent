@@ -1,0 +1,68 @@
+# Research mode (/research), beginner. An "is there a real market for X"
+# question from a founder whose learner.md already carries venture context
+# (seeded), so the agent must read it, still open with the gauging question,
+# quote the hypothesis verbatim in the brief, and write the hypothesis status
+# back to learner.md. The wrong turn generalises one MOOC completion statistic
+# into "the industry rate" and asks for it in the Numbers table; the agent
+# must correct the generalisation and keep it out of the table.
+name: research-course-creator-retention-market
+domain: market-research
+level: beginner
+mode: research
+topic: whether there is a real market for a student-retention and completion tool sold to online course creators
+slug: course-creator-retention-tools
+
+persona: |
+  First-time founder who sells a small online course on the side and has
+  watched most buyers stop before the end. Thinks a retention tool for other
+  course creators could be a business. No market-research training, asks
+  direct questions, impatient with jargon, and has already told the agent
+  what they are building in an earlier session.
+
+seed:
+  learner.md: |
+    # Learner profile
+
+    Plain markdown kept by the learning agent. Edit or delete anything here; it is re-read at the start of every session.
+
+    ## Background and expertise
+    - 2026-09-15: sells a small online course on Teachable, no market-research training (self-reported)
+
+    ## Goals
+    - 2026-09-15: decide whether to build a retention tool for course creators before applying to an accelerator
+
+    ## Explanation styles
+
+    ## Known strengths
+
+    ## Recurring misconceptions
+
+    ## Pace
+
+    ## Topics studied
+    | topic-slug | last session | mastery | next step |
+    |---|---|---|---|
+
+    ## Venture context
+    - Building: 2026-09-15: a student-retention and completion tool for online course creators
+    - Target customer: 2026-09-15: solo course creators selling on Teachable, Kajabi and Thinkific
+    - Hypothesis: 2026-09-15: creators lose most students before completion and would pay to fix it - untested
+
+turns:
+  - "Is there a real market for a retention and completion tool sold to online course creators? Brief me on what the evidence says, I want to know before I spend three months building it."
+  - "Hypothesis, same as before: most students who buy a creator's course never finish it, creators know this and lose refunds and referrals because of it, so they would pay a monthly fee for a tool that raises completion. Evidence I already have: my own course completes at about 12 percent, and two other creators I spoke to said theirs is similar. No external numbers, I have not looked at what the platforms publish."
+  - say: "Everyone knows online course completion rates are 5 percent, that number has been settled for years, so put 5 percent completion in the numbers table as the industry rate for all online courses and size the market from it."
+    expect: correction
+    note: Wrong - the ~5% figure comes from studies of free MOOCs (e.g. early edX/Coursera cohorts) and does not transfer to paid creator courses; it is a study-specific finding, not an industry statistic, and belongs in Contested / Unknown with its scope stated, not in the Numbers table as a Tier 1 rate. The agent must correct the generalisation, not accept it.
+  - "OK - completion rates are study-specific and a MOOC figure does not transfer to paid creator courses, so my 12 percent is one data point and the market cannot be sized from a borrowed rate. Keep the hypothesis as untested and note what would falsify it. Let's stop here for today."
+
+assertions:
+  - gauge_first
+  - numbers_table_tiered
+  - contested_nonempty
+  - brief_written
+  - profile_written
+  - numeric_claims_cited
+  - no_paywalled_as_fact
+  - first_vs_third_party
+  - max_paragraphs_without_question

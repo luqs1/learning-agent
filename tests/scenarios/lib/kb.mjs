@@ -25,14 +25,20 @@ export function loadKb(kbRoot, preferredSlug) {
   const topicDir = slug ? path.join(kbRoot, slug) : null;
   const files = {};
   if (topicDir) {
-    for (const f of fs.readdirSync(topicDir)) {
-      if (f.endsWith(".md")) files[f] = fs.readFileSync(path.join(topicDir, f), "utf8");
+    for (const e of fs.readdirSync(topicDir, { withFileTypes: true })) {
+      if (e.isFile() && e.name.endsWith(".md")) files[e.name] = fs.readFileSync(path.join(topicDir, e.name), "utf8");
+      // One level of entity folders (companies/<slug>.md), keyed by their relative path.
+      else if (e.isDirectory() && !e.name.startsWith(".")) {
+        for (const f of fs.readdirSync(path.join(topicDir, e.name))) {
+          if (f.endsWith(".md")) files[`${e.name}/${f}`] = fs.readFileSync(path.join(topicDir, e.name, f), "utf8");
+        }
+      }
     }
   }
-  // progress.md is learner memory, not research; it is never a concept file.
-  // Only top-level *.md files are read, so subdirectories (`.research/`
-  // fragments, `companies/` entity files) are never concept files either.
-  const conceptFiles = Object.keys(files).filter((f) => !NON_CONCEPT_FILES.has(f)).sort();
+  // progress.md is learner memory and brief-<date>.md is research-mode output; neither is a concept file.
+  // Dot-directories (`.research/` fragments) are never read into `files`; one level of
+  // entity folders (`companies/<slug>.md`) is, and those are concept files for the checks.
+  const conceptFiles = Object.keys(files).filter((f) => !NON_CONCEPT_FILES.has(f) && !BRIEF_FILE_RE.test(f)).sort();
   const sources = files["sources.md"] ? parseSourcesTable(files["sources.md"]) : null;
   const learnerFile = path.join(kbRoot, "learner.md");
   const learner = fs.existsSync(learnerFile) ? fs.readFileSync(learnerFile, "utf8") : null;
@@ -46,13 +52,72 @@ export function loadKb(kbRoot, preferredSlug) {
       if (f.endsWith(".md")) fragments[`${FRAGMENTS_DIR}/${f}`] = fs.readFileSync(path.join(fragmentsDir, f), "utf8");
     }
   }
-  return { root: kbRoot, topicDirs, slug, topicDir, files, conceptFiles, sources, learner, progress, fragments, traces: loadTraces(kbRoot) };
+  // Research-mode briefs, oldest first (the file name carries the date).
+  const briefs = Object.keys(files).filter((f) => BRIEF_FILE_RE.test(f)).sort().map((f) => ({ file: f, content: files[f] }));
+  return { root: kbRoot, topicDirs, slug, topicDir, files, conceptFiles, sources, learner, progress, fragments, briefs, traces: loadTraces(kbRoot) };
 }
 
 /** Files in a topic folder that are not research concept files. */
 export const NON_CONCEPT_FILES = new Set(["sources.md", "progress.md"]);
 /** Subdirectory of a topic folder holding the per-angle research fragments (parallel research). */
 export const FRAGMENTS_DIR = ".research";
+/** Research-mode brief files: brief-YYYY-MM-DD.md in the topic folder. */
+export const BRIEF_FILE_RE = /^brief-\d{4}-\d{2}-\d{2}\.md$/;
+/** Market-research entity files (one entity per file). They cite sources like concept files but follow the entity layout, not the concept template. */
+export const ENTITY_FILE_RE = /^(?:companies\/[^/]+|market-size|customers|timeline|courses)\.md$/;
+
+/** The section under `## <name>` (or a bold `**<name>**` line) up to the next heading of either kind; null if absent. */
+export function briefSection(md, name) {
+  const lines = md.split("\n");
+  const isHeading = (l) => /^#{1,6}\s+\S/.test(l) || /^\s*\*\*[^*]+\*\*:?\s*$/.test(l);
+  const wanted = new RegExp(`^(?:#{1,6}\\s+|\\s*\\*\\*)\\s*${name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}\\b`, "i");
+  const start = lines.findIndex((l) => isHeading(l) && wanted.test(l));
+  if (start < 0) return null;
+  const body = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    if (isHeading(lines[i])) break;
+    body.push(lines[i]);
+  }
+  return body.join("\n").trim();
+}
+
+/** Does this text carry a research-mode brief (a Numbers table or Findings, plus a Contested / Unknown section)? */
+export function isBrief(text) {
+  return briefSection(text, "Contested / Unknown") !== null && (briefSection(text, "Numbers") !== null || briefSection(text, "Findings") !== null);
+}
+
+/**
+ * Parse every `| Value | What | Date | Source file | Tier |` table in the text.
+ * Returns one entry per data row: { value, what, date, sourceCell, file, tier, raw }
+ * where `file` is the first `x.md` / `dir/x.md` mentioned in the Source file cell.
+ */
+export function parseNumbersTables(text) {
+  const rows = [];
+  let cols = null;
+  for (const line of text.split("\n")) {
+    if (!line.trim().startsWith("|")) {
+      cols = null;
+      continue;
+    }
+    const cells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+    const lower = cells.map((c) => c.toLowerCase());
+    if (lower.includes("value") && lower.some((c) => /^source( file)?$/.test(c)) && lower.includes("tier")) {
+      cols = lower;
+      continue;
+    }
+    if (!cols) continue;
+    if (cells.every((c) => /^:?-+:?$/.test(c) || c === "")) continue;
+    const at = (name) => {
+      const i = cols.findIndex((c) => c === name || (name === "source file" && /^source( file)?$/.test(c)));
+      return i >= 0 && i < cells.length ? cells[i] : "";
+    };
+    const sourceCell = at("source file");
+    const m = sourceCell.match(/([A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)?\.md)/);
+    const tierM = at("tier").replace(/[*_`]/g, "").match(/\b([1-5])\b/);
+    rows.push({ value: at("value"), what: at("what"), date: at("date"), sourceCell, file: m ? m[1] : "", tier: tierM ? Number(tierM[1]) : null, raw: line });
+  }
+  return rows;
+}
 
 export function loadTraces(kbRoot) {
   const dir = path.join(kbRoot, ".traces");

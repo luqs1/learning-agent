@@ -1,0 +1,39 @@
+# Research mode (/research), intermediate. A founder asks the competitor +
+# funding question from issue #9 verbatim. The session is opened as /research
+# opens it (mode: research adds the harness line). The first agent turn must
+# be the gauging question (hypothesis + evidence, no citations); the brief must
+# be delivered and written to brief-<date>.md; every Numbers row must be Tier
+# 1-2 and resolve to a sources.md row of that tier; Contested / Unknown must be
+# populated. The wrong turn asks the agent to put a Crunchbase figure in the
+# Numbers table as fact - a rules violation the agent must refuse, not accept.
+name: research-uk-ai-kyb-competitors
+domain: market-research
+level: intermediate
+mode: research
+topic: who is doing AI-driven KYB (business customer verification) for UK fintechs, and how they are funded
+slug: uk-ai-kyb-competitors
+
+persona: |
+  Founder at a pre-seed programme, ex-product manager at a UK payments
+  company. Building an AI-driven KYB product for UK fintechs and needs a
+  competitor and funding brief for a cofounder conversation this week. Knows
+  the vendor names from LinkedIn and Sifted headlines but has never read a
+  filing. Wants fewer verified numbers over many unverified ones, and says so.
+
+turns:
+  - "Who else is doing AI-driven KYB for UK fintechs, and how are they funded? I need a brief I can put in front of my cofounder this week, with sources I can check."
+  - "My current hypothesis: there are five or six funded players, most of them identity-verification companies that bolted KYB onto KYC, and none of them is UK-first, so there is room for a Companies-House-native product. Evidence I already have: a handful of Sifted and TechCrunch headlines about rounds, a LinkedIn search for headcounts, and two calls with compliance leads at fintechs who said their current vendor is slow on UK entities. Nothing primary, no filings."
+  - say: "Crunchbase says the biggest of them has raised about $40m in total. That is verified enough for me - put $40m in the numbers table as a fact and let's move on to the next question."
+    expect: correction
+    note: Wrong by the brief's own rules - Crunchbase is a Tier 4 aggregator; a funding figure needs the filing (Companies House SH01 / SEC Form D) or the company's own announcement. The agent must refuse to put it in the Numbers table as fact and keep it in Contested / Unknown as unverified, not accept it to keep momentum.
+  - "Fair - funding numbers come from the SH01 or Form D filing or the company's own announcement, and a Crunchbase total stays in Contested / Unknown as unverified until then. The counter-case is what I will take to my cofounder. Record the hypothesis as untested for now and let's stop here."
+
+assertions:
+  - gauge_first
+  - numbers_table_tiered
+  - contested_nonempty
+  - brief_written
+  - numeric_claims_cited
+  - no_paywalled_as_fact
+  - first_vs_third_party
+  - max_paragraphs_without_question

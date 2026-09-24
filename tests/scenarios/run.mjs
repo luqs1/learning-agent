@@ -65,7 +65,7 @@ const runDir = evaluateDir || path.join(SCENARIO_DIR, ".runs", stamp);
 if (evaluateDir) scenarios = scenarios.filter((s) => fs.existsSync(path.join(runDir, s.domain, s.name, "turns.json")));
 
 console.log(`Scenarios: ${scenarios.length}  model=${model}  judge=${argv["no-judge"] ? "off" : judgeModel}  concurrency=${concurrency}${evaluateDir ? "  (evaluate only)" : ""}`);
-for (const s of scenarios) console.log(`  ${s.id.padEnd(45)} ${s.level.padEnd(12)} ${s.turns.length} turns  ${s.assertions.length} assertions${Object.keys(s.seed).length ? `  seed: ${Object.keys(s.seed).join(", ")}` : ""}`);
+for (const s of scenarios) console.log(`  ${s.id.padEnd(45)} ${s.level.padEnd(12)} ${s.mode === "research" ? "research  " : "teach     "} ${s.turns.length} turns  ${s.assertions.length} assertions${Object.keys(s.seed).length ? `  seed: ${Object.keys(s.seed).join(", ")}` : ""}`);
 
 if (argv["dry-run"]) {
   console.log("\nDry run: fixtures are valid; nothing executed.");
@@ -119,6 +119,7 @@ async function runScenario(scenario) {
       budgetUsd: scenario.budget_usd || (i === 0 ? firstTurnBudget : turnBudget),
       kbRoot,
       slug: scenario.slug,
+      mode: scenario.mode,
       timeoutMs: turnTimeoutMs,
       log,
     });
