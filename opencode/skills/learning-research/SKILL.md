@@ -274,8 +274,8 @@ For each concept researched, create or update `~/.config/opencode/learning/<topi
 
 [Numbered facts. Each must be traceable to a specific source.]
 
-1. [Fact]. [source: URL or title, page/section/timestamp]
-2. [Fact]. [source: URL or title, page/section/timestamp]
+1. [Fact]. [source: URL or title] (page, section or timestamp where it appears)
+2. [Fact]. [source: URL or title] (page, section or timestamp where it appears)
 
 ## Expert Perspective
 
