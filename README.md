@@ -1,8 +1,8 @@
 # Learning Agent
 
-A learning agent that teaches through questions, problems, and active recall. Built on classical Islamic pedagogy.
+A learning agent that teaches through questions, problems, and active recall instead of lecturing you. Every claim is verified against a persistent, citable knowledge base: the agent researches topics in real time, stores what it finds, and cites its sources.
 
-Every claim is verified against a persistent, citable knowledge base. The agent will research topics in real-time, store what it finds, and cite its sources.
+The method is drawn from the classical Islamic scholarly tradition of teaching, which worked out in detail how people come to know things — see [Where the method comes from](#where-the-method-comes-from).
 
 ## Philosophy
 
@@ -10,16 +10,20 @@ Every claim is verified against a persistent, citable knowledge base. The agent 
 
 **The pillars:**
 
-- **Tadarruj** — graduated difficulty. Never advance until the current concept is verified. Ibn Khaldun warned: advancing before mastery causes the student to lose everything.
-- **Malaka** — embodied mastery through practice. Deep understanding forms through repeated retrieval, not passive reading.
-- **Prophetic method** — question before teaching. Surface the learner's current understanding before explaining anything.
-- **Jadal** — structured challenge. Steelman counter-positions to push from surface understanding to genuine depth.
-- **'Ilm + 'Amal** — knowledge and action are inseparable. Abstract understanding must be grounded in application.
-- **Tawadu** — honesty about the limits of knowledge. Where experts disagree, say so; where the agent is uncertain, it says so. Acknowledging the edge of what is known is a virtue, not a weakness.
+- **Graduated difficulty** (*Tadarruj*, "step by step") — never advance until the current concept is verified. Ibn Khaldun, the 14th-century historian and social theorist, warned that advancing before mastery causes the student to lose everything.
+- **Mastery through practice** (*Malaka*, a "deeply rooted faculty") — deep understanding forms through repeated retrieval, not passive reading. Ibn Khaldun's term for knowledge that has become second nature.
+- **Question before teaching** (the Prophetic method) — surface the learner's current understanding before explaining anything. Named for the Prophet Muhammad's habit of opening a lesson with "Do you know what X is?" and only then giving the answer.
+- **Structured challenge** (*Jadal*, "disputation") — steelman counter-positions to push from surface understanding to genuine depth. The formal debate practice of the classical scholarly tradition.
+- **Knowledge tied to action** (*'Ilm* and *'Amal*, "knowledge" and "action") — the two are inseparable. Abstract understanding must be grounded in application.
+- **Honesty about the limits of knowledge** (*Tawadu*, "humility") — where experts disagree, say so; where the agent is uncertain, it says so. Acknowledging the edge of what is known is a virtue, not a weakness.
 
 **Depth over breadth.** Better to truly understand three concepts than to skim ten — the agent prioritises mastery of fundamentals over coverage.
 
-**Teacher as companion, not lecturer.** The relationship is collegial — a knowledgeable companion in a study circle, not an authority at a podium. It respects you by challenging you rather than flattering you.
+**Teacher as companion, not lecturer.** The relationship is collegial — a knowledgeable companion in a *halaqa* (the traditional study circle, where students sit in a ring around the teacher rather than in rows facing a podium). It respects you by challenging you rather than flattering you.
+
+### Where the method comes from
+
+The pillars are not a modern framework with Arabic labels attached. They come from the classical Islamic tradition of teaching and learning, whose scholars spent centuries working out how knowledge is actually acquired and passed on. Ibn Khaldun (1332–1406), best known for the *Muqaddimah*, is the source for graduated difficulty and mastery through practice; questioning before teaching goes back to the Prophet Muhammad; disputation and the study circle were the everyday institutions of that scholarly world for a thousand years. The agent borrows the method, not the subject matter — it will teach you Rust or Roman history the same way.
 
 ## How it works
 
@@ -57,6 +61,10 @@ The agent never states a non-trivial fact without first verifying it against a p
 4. **Cites** every claim with `[source: filename.md]`
 
 Research persists across sessions. If you come back to a topic later, the agent reads what it already has and only researches what's new.
+
+### Use it for research
+
+The same verify-and-cite engine works for questions that are not lessons — sizing a market, mapping funded competitors, checking a hypothesis against the evidence. A dedicated research mode that swaps the teaching loop for a brief-building loop (every number cited, contested and unknown areas called out) is coming via [issue #9](https://github.com/luqs1/learning-agent/issues/9); until then, the teaching mode will still research and cite, it just insists on teaching you along the way.
 
 ## Supported tools
 
