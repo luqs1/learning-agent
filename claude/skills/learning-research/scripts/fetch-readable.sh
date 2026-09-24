@@ -19,9 +19,13 @@ search snippet. No key, stdlib only.
   text/json/markdown -> passed through.
 
 --out FILE     write the text to FILE; stdout then gets JSON metadata
---json         {url, final_url, content_type, title, published, chars, text} on stdout
+--json         JSON on stdout instead of text (see Output)
 --max-chars N  truncate the text (default: no limit; the point is to read it all)
 --keep-pdf F   also save a fetched PDF to F (so you can Read specific pages)
+
+Output: the readable text on stdout (default);
+        with --out: {url, final_url, content_type, title, published, chars, out};
+        with --json: {url, final_url, content_type, title, published, chars, text}
 
 Limits (honest): no JavaScript, so SPA pages, Google News redirect links, some
 paywalls and bot-walled sites (reddit.com, x.com, linkedin.com) return little or

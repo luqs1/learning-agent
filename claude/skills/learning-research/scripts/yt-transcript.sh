@@ -16,7 +16,7 @@ Vimeo, ...). No key. Nothing is downloaded except the subtitle file.
 --json          print {id, title, channel, upload_date, duration_s, lang, chars, text} to stdout
 --timestamps    keep a [mm:ss] marker at the start of each cue (for citing a moment)
 
-Default output: the transcript text on stdout. Read ALL of it before citing;
+Output (default): the transcript text on stdout. Read ALL of it before citing;
 cite as the video URL plus the timestamp of the passage.
 Limits: videos with no subtitles at all fail (exit 1). The output does not say
 whether subs were manual or auto-generated (run `yt-dlp --list-subs <url>` to

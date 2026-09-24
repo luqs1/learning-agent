@@ -23,10 +23,25 @@ and a working login or `ANTHROPIC_API_KEY`.
   loader cannot parse nested YAML); the Claude agent lists exactly the two
   shared skills; the `learn` command forks into `agent: learning`.
 - **Parity** - the `claude/` and `opencode/` trees are identical after
-  normalising the knowledge-base path. Only these differences are allowed:
-  the KB path, the agent frontmatter keys (`name`/`skills` vs `mode`/`color`),
-  the `learn` command (Claude only), and `user-invocable: false` (Claude
-  skills only). The test prints the first differing line.
+  normalising the knowledge-base path and the bundled-script prefix. Only
+  these differences are allowed: the KB path, the agent frontmatter keys
+  (`name`/`skills` vs `mode`/`color`), the `learn` command (Claude only),
+  `user-invocable: false` and `allowed-tools` (Claude skills only), and script
+  paths (`${CLAUDE_SKILL_DIR}/scripts/x.sh` in Claude, `scripts/x.sh` in
+  opencode). The test prints the first differing line. The
+  `opencode/skills/learning-research/scripts` symlink is followed, so both
+  trees must list the same script files.
+- **Research skill** (`research-skill.test.mjs`) - the provider routing tables
+  keep their required rows (papers, articles, docs, first-party, images,
+  videos, courses, repos; company facts, funding, competitor product,
+  sentiment, market size, industry reports, news, patents, trends) and every
+  row names a concrete call; every script the skill references exists and is
+  executable, every script under `scripts/` is referenced, every MCP tool name
+  is a known one; the `sources.md` header equals `SOURCES_COLUMNS` in
+  `tests/scenarios/lib/kb.mjs`; the opencode copy is exactly the documented
+  derivation of the Claude copy; every script's `--help` exits 0; every keyed
+  script exits 2 naming its keyless fallback when the key is unset; scripts
+  follow the conventions in AGENTS.md. No network calls.
 - **Manifests** - `package.json`, `claude/.claude-plugin/plugin.json` and
   `.claude-plugin/marketplace.json` carry the same version and name;
   `claude plugin validate ./claude` passes (skipped if the CLI is absent).
@@ -43,8 +58,13 @@ and a working login or `ANTHROPIC_API_KEY`.
   synthetic run (both the passing case and a broken case).
 
 If you change the `sources.md` table header or the concept-file template in
-`learning-research`, update `tests/scenarios/lib/kb.mjs` and the lint will
-tell you so.
+`learning-research`, update `SOURCES_COLUMNS` / `parseSourcesTable` in
+`tests/scenarios/lib/kb.mjs` and the lint will tell you so. The current
+layout is `| URL | Title | Type | Domain | Tier | Published | Accessed |
+Related-to | Summary |`; the parser reads columns by header name, derives the
+High/Medium/Low rating from `Tier` (1-2 High, 3 Medium, 4-5 Low), and still
+accepts the pre-#6 layout (`| URL | Title | Date Accessed | Credibility |
+Summary |`) so old knowledge bases keep working.
 
 ## 2. Session traces
 
@@ -67,7 +87,7 @@ own events to the same file.
 | `session.start` | agent, once, first thing | `topic`, `slug` |
 | `phase` | agent, on every flow transition | `from`, `to` (`probe`, `research`, `teach`, `check`, `recall`, `apply`, `challenge`, `synthesis`) |
 | `gate.check` | `learning-assessment`, every run | `concept`, `result` (`pass`/`fail`), `reason` |
-| `research.query` | `learning-research`, every search | `provider`, `query`, `material_type` (`docs`/`paper`/`blog`/`talk`/`dataset`/`news`/`other`) |
+| `research.query` | `learning-research`, every search | `provider` (the script or tool actually called: `arxiv.sh`, `hn.sh`, `WebSearch`, `mcp__exa__web_search_exa`, ...), `query`, `material_type` (`docs`/`paper`/`blog`/`talk`/`dataset`/`news`/`other`) |
 | `research.fetch` | `learning-research`, every fetch | `url`, `ok` (bool) |
 | `kb.write` | `learning-research`, every KB file written | `file` |
 | `teach` | agent, before each teaching message | `concept`, `citations` (array of `file.md`) |
@@ -266,10 +286,14 @@ relative to what the learner saw.
   agent prompts (the lint checks both trees list the same vocabulary) and in
   the table above. `trace-summary` prints unknown events generically, so
   nothing breaks in between.
-- **Search providers / parallel research (#6, #7):** emit `research.query`
-  with your `provider` name and `research.fetch` per source; the existing
-  assertions only care that a `gate.check` precedes teaching and that the
-  files are cited and rated.
+- **Search providers (#6) / parallel research (#7):** the research skill
+  emits `research.query` with the real `provider` (script or tool name) and
+  `research.fetch` per source; the existing assertions only care that a
+  `gate.check` precedes teaching and that the files are cited and rated. A
+  new provider = a new script under `claude/skills/learning-research/scripts/`
+  plus a row in the routing table; `research-skill.test.mjs` checks both
+  halves exist, that `--help` works and that a missing key degrades. A
+  parallel step can fan the scripts out as-is (they are `mktemp`-only).
 - **Learner memory (#8):** a new KB file family should still live under
   `<kb-root>/...` so `LEARNING_KB_ROOT` isolates it; add a `kb.write` for it
   and, if it changes the first turn, adjust `probe_first` via a fixture param.
