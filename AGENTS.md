@@ -182,6 +182,15 @@ When bumping the version, update it in all three manifests:
 - One concept (or entity) per file; split files that exceed ~200 lines.
 - On returning to an existing topic, **read what's there before researching** —
   only fill gaps, don't re-research.
+- **Learner memory** lives beside the research: `<kb-root>/learner.md` (one
+  global profile: background, goals, explanation styles, strengths,
+  misconceptions, pace, topics studied, venture context) and
+  `<kb-root>/<topic-slug>/progress.md` (concepts covered with verdicts, open
+  gaps, last session, next step). Both are plain markdown the learner may edit
+  or delete. Entries are short, dated and factual — never inferred traits. The
+  agent reads them at session open and writes them after each synthesis
+  checkpoint and at session end. Memory targets the opening gauging question;
+  it never replaces it. Templates are in the agent prompt.
 
 ## Editing conventions
 
@@ -213,15 +222,17 @@ Full details in [tests/README.md](./tests/README.md). The short version:
   `tests/scenarios/.runs/<stamp>/` (git-ignored).
 - **Adding a scenario** = adding one YAML file at
   `tests/scenarios/<domain>/<name>.yaml` with a topic, a learner persona,
-  scripted turns (mark one `expect: correction`) and any extra assertions.
-  Nothing else changes. `npm run test:scenarios -- --dry-run` validates it.
+  scripted turns (mark one `expect: correction`) and any extra assertions;
+  a `seed:` map pre-writes `learner.md` / `<slug>/progress.md` for a
+  returning-learner scenario. Nothing else changes.
+  `npm run test:scenarios -- --dry-run` validates it.
 - **Reading a trace** — every session writes
   `<kb-root>/.traces/<topic-slug>/<timestamp>.jsonl`, one `{ts, event, data}`
-  per line (`session.start`, `phase`, `gate.check`, `research.query`,
-  `research.fetch`, `kb.write`, `teach`, `check.ask`, `check.verdict`,
-  `session.end`). `npm run trace` prints the latest one as a timeline; a
-  `teach` with no preceding `gate.check`, or a `check.verdict` of
-  `wrong -> advance`, is a regression. Set `LEARNING_KB_ROOT` to point the
+  per line (`session.start`, `memory.read`, `phase`, `gate.check`,
+  `research.query`, `research.fetch`, `kb.write`, `teach`, `check.ask`,
+  `check.verdict`, `memory.write`, `session.end`). `npm run trace` prints the
+  latest one as a timeline; a `teach` with no preceding `gate.check`, or a
+  `check.verdict` of `wrong -> advance`, is a regression. Set `LEARNING_KB_ROOT` to point the
   agent (and its traces) at a different root; the test harness does this.
 - When you add a trace event or change the `sources.md` layout, update **both**
   agent prompts / skills and the tables in `tests/README.md`; the lint checks

@@ -37,18 +37,19 @@ The agent has three components:
 
 ```
 Topic introduced
-  → Probe current understanding (question)
+  → Read learner profile and topic progress, if any (see below)
+  → Probe current understanding (a question, targeted by memory, never skipped)
   → Assessment gate checks knowledge base
   → If gaps exist, research fills them (multi-angle: technical, expert perspective, contested areas)
-  → Teach with citations [source: filename.md]
-  → Comprehension check (question or problem)
-  → Correct/affirm, fill gaps
+  → Teach ONE concept with citations [source: filename.md]
+  → ONE comprehension check (question or problem)
+  → ONE verdict: correct/affirm, fill gaps
   → Teach next concept
   → ... repeat ...
-  → Periodic synthesis checkpoint
+  → Periodic synthesis checkpoint (memory files updated)
   → Application exercise
   → Challenge/counter-argument
-  → Final synthesis and consolidation
+  → Final synthesis and consolidation (memory files updated)
 ```
 
 ### Research
@@ -61,6 +62,17 @@ The agent never states a non-trivial fact without first verifying it against a p
 4. **Cites** every claim with `[source: filename.md]`
 
 Research persists across sessions. If you come back to a topic later, the agent reads what it already has and only researches what's new.
+
+### What the agent remembers about you
+
+Alongside the research, the agent keeps two small memory files so you do not start from zero each session:
+
+- `learner.md`, at the root of the knowledge base (`~/.claude/learning/learner.md` for Claude Code, `~/.config/opencode/learning/learner.md` for opencode) — your background as you described it, goals, which explanations landed, recurring misconceptions, pace preferences, the topics you have studied, and, if you are a founder using the tool for market research, what you are building and which hypotheses have been validated or falsified, each dated.
+- `<topic>/progress.md`, inside each topic folder — the concepts covered, the verdict on each check, open gaps, and the suggested next step.
+
+Both are plain markdown. You can read, edit or delete them at any time; the agent tells you once when it first creates `learner.md` and otherwise stays quiet about it. Entries are short, dated and factual (what you said or did), never guessed personality traits.
+
+Memory never replaces the opening question. When you return to a topic the agent still asks you to demonstrate where you are, it just asks a targeted question ("last time you were unsure about X, explain it now") instead of a generic one, and if your answer contradicts the file, the answer wins: it will step down and re-teach, or step up and skip ahead, and record the correction. Saying "I already know this" gets you one verification question, not a skip. You can also steer with "faster", "slower" and "skip".
 
 ### Use it for research
 
