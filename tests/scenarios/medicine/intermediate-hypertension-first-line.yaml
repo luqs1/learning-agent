@@ -1,0 +1,30 @@
+# Medicine, intermediate. A final-year medical student revising the first-line
+# drug choice for hypertension. This is squarely treatment territory: every
+# drug-choice or threshold claim must be backed by a guideline-grade source
+# (NICE NG136, ESC/ESH, ACC/AHA), and the contested section must reflect that
+# the guidelines disagree on thresholds and first-line choice. The wrong turn
+# picks a beta-blocker as universal first line.
+name: intermediate-hypertension-first-line
+domain: medicine
+level: intermediate
+topic: first-line drug treatment of primary hypertension in adults
+slug: hypertension-first-line-treatment
+
+persona: |
+  Final-year medical student in the UK revising for finals. Knows basic
+  pharmacology (ACE inhibitors, calcium-channel blockers, thiazides,
+  beta-blockers) and blood-pressure physiology. Wants the guideline logic and
+  the evidence behind it, and expects to be told where guidelines disagree.
+
+turns:
+  - "I'm revising hypertension management for finals. I want to understand first-line drug choice for a newly diagnosed adult with primary hypertension - the guideline logic, not just the flowchart."
+  - "My current model: NICE splits by age and ethnicity. Under 55 and not of Black African or Caribbean family origin you start an ACE inhibitor or ARB; 55 and over, or Black African/Caribbean origin at any age, you start a calcium-channel blocker. Thiazide-like diuretics are the fallback. I don't really know why the split exists."
+  - say: "For a 45-year-old with no comorbidities I'd start a beta-blocker like atenolol first, since it lowers heart rate and blood pressure together and has the longest track record of the four classes."
+    expect: correction
+    note: Wrong. Beta-blockers are not first line for uncomplicated hypertension in NICE NG136 (or ESC/ESH); the agent must correct this with a guideline source.
+  - "Understood - beta-blockers aren't first line in NG136 unless there's a specific indication, and the age/ethnicity split is about typical renin profiles and trial evidence. Let me put it in my own words: the first-line choice is driven by the guideline's algorithm plus comorbidities, and the guideline itself is where I should check the thresholds."
+
+assertions:
+  - contested_populated
+  - treatment_claims_guideline_grade
+  - max_paragraphs_without_question

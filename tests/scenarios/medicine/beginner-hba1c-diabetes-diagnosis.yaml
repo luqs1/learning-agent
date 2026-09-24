@@ -1,0 +1,28 @@
+# Medicine, beginner. A lay learner whose parent was just diagnosed. Diagnostic
+# thresholds are treatment/threshold-grade claims and must cite guideline
+# sources (WHO, NICE, ADA). The wrong turn treats HbA1c as a snapshot of
+# current blood sugar, which it is not.
+name: beginner-hba1c-diabetes-diagnosis
+domain: medicine
+level: beginner
+topic: what HbA1c measures and how it is used to diagnose type 2 diabetes
+slug: hba1c-type-2-diabetes
+
+persona: |
+  Adult with no medical or science background whose father was just told his
+  HbA1c is 50 and that he has type 2 diabetes. Wants to understand what the
+  number means, not to be given medical advice. Uses everyday language and
+  sometimes mixes up terms.
+
+turns:
+  - "My dad just got diagnosed with type 2 diabetes because his HbA1c was 50. I have no medical background. Can you help me understand what that test actually measures and why 50 means diabetes?"
+  - "I think HbA1c is basically a blood sugar test, so the 50 is his blood sugar level and it should be lower than that. I'm not sure what the units are."
+  - say: "So if he eats really well for a week before the next test, his HbA1c should drop right back down, because it's measuring the sugar in his blood at the time of the test."
+    expect: correction
+    note: Wrong. HbA1c reflects average glycaemia over roughly the lifespan of red cells (about 2-3 months); one good week barely moves it.
+  - "OK, so it's more like an average over the last two or three months because the sugar sticks to the red blood cells for their lifetime. And 48 is the cutoff the guidelines use, so 50 is just over it. Is that right?"
+
+assertions:
+  - contested_populated
+  - treatment_claims_guideline_grade
+  - max_paragraphs_without_question

@@ -1,0 +1,26 @@
+# Computer science, intermediate. The learner is a working backend engineer
+# who knows what consensus is for but has never read the Raft paper. The wrong
+# turn claims a candidate can win with any majority of votes regardless of log
+# freshness, which Raft's election restriction forbids.
+name: intermediate-raft-leader-election
+domain: computer-science
+level: intermediate
+topic: leader election in the Raft consensus algorithm
+slug: raft-consensus
+
+persona: |
+  Backend engineer, five years of experience, has operated etcd and Kafka but
+  never read the Raft paper. Comfortable with terms like replication, quorum
+  and log, and expects to be pushed on the details rather than the basics.
+  Writes in complete, technical sentences.
+
+turns:
+  - "I run etcd in production but I've never actually read the Raft paper. I want to properly understand how leader election works, including the edge cases."
+  - "My understanding: nodes are followers by default, if a follower doesn't hear from a leader for some timeout it becomes a candidate and asks the others for votes, and whoever gets a majority becomes leader. Terms are a logical clock so stale leaders can be detected."
+  - say: "So any candidate that gets votes from a majority of the cluster wins the election, regardless of what is in its log. Log catch-up happens afterwards, once it is leader, by pulling entries from the followers that have more."
+    expect: correction
+    note: Wrong. Raft's election restriction means voters refuse candidates whose log is less up-to-date; leaders never pull entries from followers.
+  - "Right, so a voter compares the candidate's last log term and index against its own and refuses if the candidate is behind. That guarantees the new leader already has every committed entry, which is why Raft never needs to transfer entries to a new leader."
+
+assertions:
+  - max_paragraphs_without_question
