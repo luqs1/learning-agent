@@ -8,6 +8,8 @@
 //   npm run test:scenarios -- --only hash-tables   # fixtures whose path contains the string
 //   npm run test:scenarios -- --dry-run            # validate fixtures and print the plan, no model calls
 //   npm run test:scenarios -- --model sonnet --judge-model sonnet -j 2
+//   npm run test:scenarios -- --evaluate tests/scenarios/.runs/<stamp>   # re-run assertions on an
+//                                                  # existing run; no agent calls (add --no-judge to skip judges)
 //
 // Every run writes to tests/scenarios/.runs/<stamp>/<domain>/<name>/ :
 //   kb/            the knowledge base the agent built (LEARNING_KB_ROOT), incl. kb/.traces/
@@ -53,26 +55,43 @@ if (!scenarios.length) {
   process.exit(2);
 }
 
-const stamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
-const runDir = path.join(SCENARIO_DIR, ".runs", stamp);
+const evaluateDir = typeof argv.evaluate === "string" ? path.resolve(argv.evaluate) : null;
+const stamp = evaluateDir ? path.basename(evaluateDir) : new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
+const runDir = evaluateDir || path.join(SCENARIO_DIR, ".runs", stamp);
 
-console.log(`Scenarios: ${scenarios.length}  model=${model}  judge=${judgeModel}  concurrency=${concurrency}`);
+if (evaluateDir) scenarios = scenarios.filter((s) => fs.existsSync(path.join(runDir, s.domain, s.name, "turns.json")));
+
+console.log(`Scenarios: ${scenarios.length}  model=${model}  judge=${argv["no-judge"] ? "off" : judgeModel}  concurrency=${concurrency}${evaluateDir ? "  (evaluate only)" : ""}`);
 for (const s of scenarios) console.log(`  ${s.id.padEnd(45)} ${s.level.padEnd(12)} ${s.turns.length} turns  ${s.assertions.length} assertions`);
 
 if (argv["dry-run"]) {
   console.log("\nDry run: fixtures are valid; nothing executed.");
   process.exit(0);
 }
+if (evaluateDir && !scenarios.length) {
+  console.error(`no <domain>/<name>/turns.json under ${runDir}`);
+  process.exit(2);
+}
 
 fs.mkdirSync(runDir, { recursive: true });
 console.log(`Run dir: ${runDir}\n`);
 
-const runs = await pool(scenarios, concurrency, runScenario);
+const runs = await pool(scenarios, concurrency, evaluateDir ? evaluateExisting : runScenario);
 
 console.log("\n" + summaryTable(runs, runDir));
 fs.writeFileSync(path.join(runDir, "summary.md"), summaryMarkdown(runs, runDir, { stamp, model, judgeModel }));
 console.log(`\nSummary: ${path.join(runDir, "summary.md")}`);
 process.exit(runs.every((r) => r.pass) ? 0 : 1);
+
+async function evaluateExisting(scenario) {
+  const dir = path.join(runDir, scenario.domain, scenario.name);
+  const turns = JSON.parse(fs.readFileSync(path.join(dir, "turns.json"), "utf8"));
+  const log = (msg) => console.log(`[${scenario.id}] ${msg}`);
+  const startedAt = turns[0]?.agent.startedAt ?? Date.now();
+  const costUsd = turns.reduce((a, t) => a + (t.agent.costUsd || 0), 0);
+  const error = turns.map((t) => t.agent.error).find(Boolean) ? "see turns.json" : null;
+  return evaluate({ scenario, dir, turns, startedAt, costUsd, error, log });
+}
 
 async function runScenario(scenario) {
   const dir = path.join(runDir, scenario.domain, scenario.name);
@@ -107,8 +126,11 @@ async function runScenario(scenario) {
     }
   }
   fs.writeFileSync(path.join(dir, "turns.json"), JSON.stringify(turns.map((t) => ({ ...t, agent: { ...t.agent, raw: undefined } })), null, 2));
+  return evaluate({ scenario, dir, turns, startedAt, costUsd, error, log });
+}
 
-  const kb = loadKb(kbRoot, scenario.slug);
+async function evaluate({ scenario, dir, turns, startedAt, costUsd, error, log }) {
+  const kb = loadKb(path.join(dir, "kb"), scenario.slug);
   const events = allEvents(kb);
   let judgeCostUsd = 0;
   const judge = async (args) => {
@@ -122,10 +144,13 @@ async function runScenario(scenario) {
     const def = ASSERTIONS[a.name];
     const { name, ...params } = a;
     let r;
-    try {
-      r = await def.run(ctx, params);
-    } catch (err) {
-      r = { pass: false, detail: `assertion threw: ${err.message}` };
+    if (def.judged && argv["no-judge"]) r = { pass: true, skipped: true, detail: "judge skipped (--no-judge)" };
+    else {
+      try {
+        r = await def.run(ctx, params);
+      } catch (err) {
+        r = { pass: false, detail: `assertion threw: ${err.message}` };
+      }
     }
     if (def.judged && !r.detail) r.detail = r.error ? `judge error: ${r.reasoning}` : (r.reasoning || "").slice(0, 200);
     results.push({ name, judged: !!def.judged, describe: def.describe, ...r });
@@ -158,7 +183,7 @@ function parseArgs(args) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--help" || a === "-h") out.help = true;
-    else if (a === "--dry-run") out["dry-run"] = true;
+    else if (a === "--dry-run" || a === "--no-judge") out[a.slice(2)] = true;
     else if (a.startsWith("--")) out[a.slice(2)] = args[i + 1] && !args[i + 1].startsWith("-") ? args[++i] : true;
     else if (a === "-j") out.j = args[++i];
     else out.only = a;

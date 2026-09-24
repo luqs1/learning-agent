@@ -111,15 +111,28 @@ export function sectionOf(md, re) {
   return body.join("\n").trim();
 }
 
-/** Does this concept file reference (by URL or title) any of the given sources.md rows? */
+// Hosts too generic to identify a source on their own.
+const GENERIC_HOSTS = new Set(["medium.com", "github.com", "youtube.com", "youtu.be", "wikipedia.org", "en.wikipedia.org", "substack.com", "reddit.com", "twitter.com", "x.com", "linkedin.com", "google.com", "arxiv.org"]);
+
+/** Does this concept file reference (by URL, title, or a distinctive hostname) any of the given sources.md rows? */
 export function referencesAnyRow(conceptMd, rows) {
   const urls = extractUrls(conceptMd);
   const lower = conceptMd.toLowerCase();
   return rows.filter((r) => {
     if (r.url.startsWith("http") && urls.some((u) => sameUrl(u, r.url))) return true;
     const t = r.title.toLowerCase();
-    return t.length >= 12 && lower.includes(t);
+    if (t.length >= 12 && lower.includes(t)) return true;
+    const host = hostOf(r.url);
+    return host && !GENERIC_HOSTS.has(host) && lower.includes(host);
   });
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 function sameUrl(a, b) {

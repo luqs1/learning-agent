@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { listFixtureFiles, loadFixture, loadFixtures } from "../scenarios/lib/fixtures.mjs";
 import { ASSERTIONS, CORE_ASSERTIONS } from "../scenarios/lib/assertions.mjs";
-import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility } from "../scenarios/lib/kb.mjs";
+import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility, referencesAnyRow } from "../scenarios/lib/kb.mjs";
 import { buildArgs, harnessSystemPrompt } from "../scenarios/lib/driver.mjs";
 
 const REQUIRED_DOMAINS = { "computer-science": 2, medicine: 2, "machine-learning": 2, "market-research": 2 };
@@ -230,6 +230,14 @@ test("assertions: max_paragraphs_without_question ignores short transitions and 
   assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, { n: 3 }).pass, true);
   ctx.turns[1].agent.text = [long, long, long, long, "Check: what happens next?"].join("\n\n");
   assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, { n: 3 }).pass, false);
+});
+
+test("kb: a concept file may reference a source by URL, title or distinctive hostname, but not a generic host", () => {
+  const rows = parseSourcesTable("| URL | Title | Date Accessed | Credibility | Summary |\n|---|---|---|---|---|\n| https://docs.python.org/3/x.html | Time complexity | 2026-09-24 | High | s |\n| https://medium.com/@someone/post | A Post | 2026-09-24 | Low | s |\n");
+  assert.equal(referencesAnyRow("**Sources used:** docs.python.org time-complexity page", rows).length, 1);
+  assert.equal(referencesAnyRow("**Sources used:** something on medium.com", rows).length, 0);
+  assert.equal(referencesAnyRow("see https://docs.python.org/3/x.html", rows).length, 1);
+  assert.equal(referencesAnyRow("nothing relevant", rows).length, 0);
 });
 
 test("kb: sources table parser handles markdown links and skips header rows", () => {

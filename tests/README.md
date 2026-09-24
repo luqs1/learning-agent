@@ -146,7 +146,12 @@ npm run test:scenarios -- --domain medicine     # one domain
 npm run test:scenarios -- --only hash-tables    # fixtures whose path contains the string
 npm run test:scenarios -- --dry-run             # validate fixtures, print the plan, no model calls
 npm run test:scenarios -- --model opus --judge-model sonnet -j 2
+npm run test:scenarios -- --evaluate tests/scenarios/.runs/<stamp>   # re-run assertions on an
+                                            # existing run without re-driving the agent (--no-judge skips judges)
 ```
+
+`--evaluate` is the loop for iterating on an assertion: change it, re-evaluate
+a saved run in seconds, then re-drive once it does what you mean.
 
 Environment knobs: `SCENARIO_MODEL` (default `sonnet`), `SCENARIO_JUDGE_MODEL`
 (default `sonnet`), `SCENARIO_FIRST_TURN_BUDGET_USD` (default 6; the first
