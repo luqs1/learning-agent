@@ -68,9 +68,15 @@ export function parseSourcesTable(md) {
     if (cells.length < 4) continue;
     if (/^-+$/.test(cells[0].replace(/:/g, "")) || cells[0].toLowerCase() === "url") continue;
     const [url, title, date, credibility, ...rest] = cells;
-    rows.push({ url: stripLink(url), title: stripLink(title), date, credibility, summary: rest.join(" | "), raw: line });
+    rows.push({ url: stripLink(url), title: stripLink(title), date, credibility: normaliseCredibility(credibility), credibilityRaw: credibility, summary: rest.join(" | "), raw: line });
   }
   return rows;
+}
+
+/** "High", "high (official docs)", "**Medium**" -> High/Medium/Low; anything else is returned as written so it fails the check. */
+export function normaliseCredibility(cell) {
+  const m = String(cell).replace(/[*_`]/g, "").trim().match(/^(high|medium|low)\b/i);
+  return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : String(cell).trim();
 }
 
 function stripLink(cell) {

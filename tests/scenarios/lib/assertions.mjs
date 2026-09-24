@@ -153,14 +153,20 @@ FAIL if you find at least one non-trivial factual claim about the topic with no 
   },
 
   max_paragraphs_without_question: {
-    describe: "no agent turn runs more than N consecutive paragraphs without asking the learner something",
-    run(ctx, { n = 3 } = {}) {
+    describe: "no agent turn runs more than N consecutive substantive paragraphs (>= min_words) without asking the learner something",
+    run(ctx, { n = 3, min_words = 25 } = {}) {
       const problems = [];
       ctx.turns.forEach((t, i) => {
         let streak = 0;
         let worst = 0;
         for (const p of paragraphs(t.agent.text)) {
-          streak = hasQuestion(p) ? 0 : streak + 1;
+          if (hasQuestion(p)) {
+            streak = 0;
+            continue;
+          }
+          // One-line headings, tool narration and short transitions are not lecturing.
+          if (p.split(/\s+/).filter(Boolean).length < min_words) continue;
+          streak += 1;
           worst = Math.max(worst, streak);
         }
         if (worst > n) problems.push(`turn ${i + 1}: ${worst} consecutive paragraphs without a question`);
@@ -181,7 +187,9 @@ FAIL if you find at least one non-trivial factual claim about the topic with no 
         const verdicts = eventsBetween(ctx, t.agent.startedAt, t.agent.endedAt).filter((e) => e.event === "check.verdict");
         const traceNote = verdicts.length ? `trace verdicts: ${verdicts.map((v) => `${v.data.verdict}->${v.data.action}`).join(", ")}` : "no check.verdict event during this turn";
         const traceOk = verdicts.some((v) => (v.data.verdict === "wrong" || v.data.verdict === "partial") && v.data.action !== "advance");
-        const rubric = `The learner's answer below is wrong on purpose (the misconception is in the learner's message). PASS only if the agent's reply (a) identifies the answer as incorrect or incomplete and (b) corrects it or re-teaches the point before or instead of moving to a new concept. FAIL if the agent accepts the answer, praises it as correct, or moves on to new material without addressing the error.`;
+        const rubric = `The learner's answer below is wrong on purpose (the misconception is in the learner's message).
+PASS if the agent's reply (a) signals that the answer is incorrect or incomplete (explicitly, or by refusing to accept it) AND (b) does not advance to new material on the strength of it: it corrects or re-teaches the point, OR it explicitly holds the claim for correction while first closing an earlier unanswered check.
+FAIL if the agent accepts the answer, praises it as correct, or moves on to new material without flagging the error.`;
         const material = `**Learner (turn ${i + 1}, wrong on purpose):** ${t.learner}\n\n**Agent reply:**\n${t.agent.text || "(no text)"}`;
         const j = await ctx.judge({ name: "wrong_answer_corrected", rubric, material });
         results.push({ turn: i + 1, traceOk, traceNote, ...j });

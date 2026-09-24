@@ -127,6 +127,7 @@ async function runScenario(scenario) {
     } catch (err) {
       r = { pass: false, detail: `assertion threw: ${err.message}` };
     }
+    if (def.judged && !r.detail) r.detail = r.error ? `judge error: ${r.reasoning}` : (r.reasoning || "").slice(0, 200);
     results.push({ name, judged: !!def.judged, describe: def.describe, ...r });
     log(`${mark(r).padEnd(4)} ${name}${r.detail ? ` - ${r.detail.slice(0, 160)}` : ""}`);
   }

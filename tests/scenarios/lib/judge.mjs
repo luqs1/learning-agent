@@ -29,9 +29,16 @@ export function buildJudgePrompt({ name, rubric, material }) {
   ].join("\n");
 }
 
-export function judge({ name, rubric, material, model = DEFAULT_JUDGE_MODEL, timeoutMs = 5 * 60 * 1000 }) {
+export async function judge(opts) {
+  const first = await judgeOnce(opts);
+  if (!first.error) return first;
+  const second = await judgeOnce(opts);
+  return second.error ? { ...second, reasoning: `${second.reasoning} (after retry; first attempt: ${first.reasoning})` } : second;
+}
+
+function judgeOnce({ name, rubric, material, model = DEFAULT_JUDGE_MODEL, timeoutMs = 5 * 60 * 1000 }) {
   const prompt = buildJudgePrompt({ name, rubric, material });
-  const args = ["-p", "--output-format", "json", "--json-schema", JSON.stringify(SCHEMA), "--tools", "", "--no-session-persistence", "--model", model, "--max-budget-usd", "1.00"];
+  const args = ["-p", "--output-format", "json", "--json-schema", JSON.stringify(SCHEMA), "--tools", "", "--no-session-persistence", "--model", model, "--max-budget-usd", "3.00"];
   return new Promise((resolve) => {
     const child = spawn("claude", args, { stdio: ["pipe", "pipe", "pipe"] });
     let out = "";

@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { listFixtureFiles, loadFixture, loadFixtures } from "../scenarios/lib/fixtures.mjs";
 import { ASSERTIONS, CORE_ASSERTIONS } from "../scenarios/lib/assertions.mjs";
-import { loadKb, allEvents, parseSourcesTable, paragraphs } from "../scenarios/lib/kb.mjs";
+import { loadKb, allEvents, parseSourcesTable, paragraphs, normaliseCredibility } from "../scenarios/lib/kb.mjs";
 import { buildArgs, harnessSystemPrompt } from "../scenarios/lib/driver.mjs";
 
 const REQUIRED_DOMAINS = { "computer-science": 2, medicine: 2, "machine-learning": 2, "market-research": 2 };
@@ -181,9 +181,11 @@ test("assertions: sources_credibility fails on unrated rows and concept files wi
 
 test("assertions: max_paragraphs_without_question counts consecutive paragraphs", () => {
   const ctx = syntheticCtx();
-  ctx.turns[1].agent.text = ["One.", "Two.", "Three.", "Four.", "Question?"].join("\n\n");
+  const p = (s) => `${s} ${"word ".repeat(30).trim()}.`;
+  ctx.turns[1].agent.text = [p("One"), p("Two"), p("Three"), p("Four"), "Question?"].join("\n\n");
   assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, { n: 3 }).pass, false);
   assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, { n: 4 }).pass, true);
+  assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, { n: 1, min_words: 1000 }).pass, true, "paragraphs below min_words are ignored");
   assert.equal(paragraphs("a\n\n```\ncode\n\nmore\n```\n\nb").length, 3);
 });
 
@@ -212,6 +214,22 @@ test("assertions: wrong_answer_corrected records trace evidence and the judge ve
   const r2 = await ASSERTIONS.wrong_answer_corrected.run(ctx, {});
   assert.equal(r2.pass, false);
   assert.match(r2.reasoning, /accepted/);
+});
+
+test("kb: credibility cells with qualifiers normalise to the bare rating; junk does not", () => {
+  assert.equal(normaliseCredibility("High (official docs)"), "High");
+  assert.equal(normaliseCredibility("**medium**"), "Medium");
+  assert.equal(normaliseCredibility("Medium-High (detailed)"), "Medium");
+  assert.equal(normaliseCredibility("Excellent"), "Excellent");
+});
+
+test("assertions: max_paragraphs_without_question ignores short transitions and headings", () => {
+  const ctx = syntheticCtx();
+  const long = "word ".repeat(30).trim() + ".";
+  ctx.turns[1].agent.text = ["Okay, here is the grounded version.", "**Layer 1**", long, long, long, "Check: what happens next?"].join("\n\n");
+  assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, { n: 3 }).pass, true);
+  ctx.turns[1].agent.text = [long, long, long, long, "Check: what happens next?"].join("\n\n");
+  assert.equal(ASSERTIONS.max_paragraphs_without_question.run(ctx, { n: 3 }).pass, false);
 });
 
 test("kb: sources table parser handles markdown links and skips header rows", () => {

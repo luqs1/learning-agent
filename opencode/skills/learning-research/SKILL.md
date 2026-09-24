@@ -137,6 +137,8 @@ Add each fetched source to `sources.md`:
 | [URL] | [Title] | [Today's date] | [High/Medium/Low] | [One-line summary] |
 ```
 
+The Credibility cell must be exactly one word - `High`, `Medium` or `Low` - so it can be parsed; put any qualifier ("official docs", "accessed via summary") in the Summary cell. The Date Accessed cell is `YYYY-MM-DD`.
+
 Credibility guide:
 - **High**: Original paper, official docs, direct author content (their own blog, talk, or repo)
 - **Medium**: Reputable textbook, well-known practitioner blog, major educational resource
