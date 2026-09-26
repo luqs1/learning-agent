@@ -22,3 +22,7 @@ turns:
 
 assertions:
   - max_paragraphs_without_question
+  # Fresh topic: the three research angles must be fanned out (one message),
+  # so searches occupy at most two assistant turns (search turn + fetch/similarity turn).
+  - name: research_rounds_max
+    max: 2

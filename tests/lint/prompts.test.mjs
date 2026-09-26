@@ -11,6 +11,7 @@ const TRACE_EVENTS = [
   "gate.check",
   "research.query",
   "research.fetch",
+  "research.fanout",
   "kb.write",
   "teach",
   "check.ask",
@@ -97,7 +98,7 @@ for (const [name, platform] of Object.entries(PLATFORMS)) {
     const [assessment, research] = platform.skills.map((f) => parseFrontmatter(read(f)).body);
     assert.match(assessment, /"event":"gate\.check"/);
     assert.match(assessment, /LEARNING_KB_ROOT/);
-    for (const ev of ["research.query", "research.fetch", "kb.write"]) assert.ok(research.includes("`" + ev + "`"), `research skill does not emit ${ev}`);
+    for (const ev of ["research.query", "research.fetch", "research.fanout", "kb.write"]) assert.ok(research.includes("`" + ev + "`"), `research skill does not emit ${ev}`);
     assert.match(research, /LEARNING_KB_ROOT/);
   });
 

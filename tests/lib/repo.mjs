@@ -14,6 +14,11 @@ export const PLATFORMS = {
     kbPath: "~/.claude/learning",
     agent: "claude/agents/learning.md",
     agentFrontmatterKeys: ["name", "description", "skills"],
+    // The one-angle research worker (parallel research, #7). Claude Code
+    // agents may restrict `tools` and preload `skills`; opencode expresses the
+    // same through the plugin JS (`permission`) and the `skill` tool.
+    subagent: "claude/agents/learning-researcher.md",
+    subagentFrontmatterKeys: ["name", "description", "tools", "skills"],
     skills: ["claude/skills/learning-assessment/SKILL.md", "claude/skills/learning-research/SKILL.md"],
   },
   opencode: {
@@ -21,13 +26,19 @@ export const PLATFORMS = {
     kbPath: "~/.config/opencode/learning",
     agent: "opencode/agents/learning.md",
     agentFrontmatterKeys: ["description", "mode", "color"],
+    subagent: "opencode/agents/learning-researcher.md",
+    subagentFrontmatterKeys: ["description", "mode", "color"],
     skills: ["opencode/skills/learning-assessment/SKILL.md", "opencode/skills/learning-research/SKILL.md"],
   },
 };
 
+export const RESEARCHER_AGENT = "learning-researcher";
+export const OPENCODE_PLUGIN = ".opencode/plugins/learning-agent.js";
+
 // Files that must stay mirrored between the two trees: [claude, opencode].
 export const MIRRORED = [
   ["claude/agents/learning.md", "opencode/agents/learning.md"],
+  ["claude/agents/learning-researcher.md", "opencode/agents/learning-researcher.md"],
   ["claude/skills/learning-assessment/SKILL.md", "opencode/skills/learning-assessment/SKILL.md"],
   ["claude/skills/learning-research/SKILL.md", "opencode/skills/learning-research/SKILL.md"],
 ];
@@ -52,6 +63,7 @@ export const MANIFESTS = ["package.json", "claude/.claude-plugin/plugin.json", "
 
 export const PROMPT_FILES = [
   ...Object.values(PLATFORMS).map((p) => p.agent),
+  ...Object.values(PLATFORMS).map((p) => p.subagent),
   ...Object.values(PLATFORMS).flatMap((p) => p.skills),
   ...PLATFORM_ONLY.claude.filter((f) => f.endsWith(".md")),
 ];

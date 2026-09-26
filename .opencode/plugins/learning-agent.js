@@ -3,7 +3,11 @@
  *
  * Registers:
  * - Skills: learning-assessment, learning-research (via config.skills.paths)
- * - Agent: learning (via config.agent, loaded from opencode/agents/learning.md)
+ * - Agents (via config.agent, loaded from opencode/agents/*.md):
+ *     learning            primary  - the teaching session
+ *     learning-researcher subagent - one-angle research worker that the
+ *                                    learning-research skill launches three
+ *                                    of in parallel through the task tool
  */
 
 import path from "path";
@@ -15,7 +19,28 @@ const repoRoot = path.resolve(__dirname, "../..");
 
 // Paths to plugin assets
 const skillsDir = path.join(repoRoot, "opencode", "skills");
-const agentFile = path.join(repoRoot, "opencode", "agents", "learning.md");
+const agentsDir = path.join(repoRoot, "opencode", "agents");
+
+// Agents to register: file name (without .md) -> defaults and platform-side
+// settings that the flat frontmatter cannot express. `permission` is opencode's
+// per-tool gate ("allow" | "ask" | "deny").
+const AGENTS = {
+  learning: {
+    description: "For personal deep dives into topics - guided learning through questions, problems, and active recall",
+    mode: "primary",
+    color: "#4A90D9",
+  },
+  "learning-researcher": {
+    description: "One-angle research worker for the learning agent; launched by the learning-research skill, not for direct use",
+    mode: "subagent",
+    color: "#7B8D42",
+    // A researcher never launches researchers; it also never edits the
+    // learner's memory or the merged knowledge-base files (the prompt says
+    // so; the parent merges). Everything else it needs is allowed: bash for
+    // the helper scripts, read/write for the fragments, webfetch, skill.
+    permission: { task: "deny" },
+  },
+};
 
 /**
  * Parse YAML frontmatter from a markdown file.
@@ -51,19 +76,21 @@ export const LearningAgentPlugin = async ({ client, directory }) => {
         config.skills.paths.push(skillsDir);
       }
 
-      // Register the learning agent from the markdown file.
-      if (fs.existsSync(agentFile)) {
+      // Register each agent from its markdown file.
+      config.agent = config.agent || {};
+      for (const [name, defaults] of Object.entries(AGENTS)) {
+        const agentFile = path.join(agentsDir, `${name}.md`);
+        if (!fs.existsSync(agentFile)) continue;
         const raw = fs.readFileSync(agentFile, "utf8");
         const { frontmatter, content } = parseFrontmatter(raw);
-
-        config.agent = config.agent || {};
-        config.agent.learning = {
-          description:
-            frontmatter.description ||
-            "For personal deep dives into topics - guided learning through questions, problems, and active recall",
-          mode: frontmatter.mode || "primary",
-          color: frontmatter.color || "#4A90D9",
+        const { permission, ...rest } = defaults;
+        config.agent[name] = {
+          ...rest,
+          description: frontmatter.description || defaults.description,
+          mode: frontmatter.mode || defaults.mode,
+          color: frontmatter.color || defaults.color,
           prompt: content.trim(),
+          ...(permission ? { permission } : {}),
         };
       }
     },

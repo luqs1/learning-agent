@@ -125,6 +125,54 @@ test("research skill: the sources.md header matches the columns the KB parser ex
   assert.equal(row[0].split("|").length - 2, SOURCES_COLUMNS.length, "the sources.md row template has a different number of cells than the header");
 });
 
+// Text between two headings, inclusive of sub-headings and fenced blocks
+// (section() stops at the first sub-heading, which these sections have).
+function between(md, startHeading, endHeading) {
+  const start = md.indexOf(`\n${startHeading}`);
+  const end = md.indexOf(`\n${endHeading}`, start + 1);
+  assert.ok(start >= 0 && end > start, `missing '${startHeading}' ... '${endHeading}' in ${RESEARCH_SKILL}`);
+  return md.slice(start, end);
+}
+
+test("research skill: the fan-out section issues all independent calls in one message and names the staggered providers", () => {
+  const fan = between(body, "## Phase 3b: Fan-out", "## Phase 4:");
+  assert.match(fan, /ONE message/, "must instruct issuing every independent search in one assistant message");
+  assert.match(fan, /Researcher subagents/);
+  assert.match(fan, /Multi-call fan-out/);
+  assert.ok(fan.includes(`${SKILL_SCRIPTS_PREFIX}/fanout.sh`), "the fan-out section must call fanout.sh");
+  for (const p of ["arXiv", "GDELT", "Wayback", "Reddit", "Semantic Scholar"]) assert.match(fan, new RegExp(p), `fan-out section does not say ${p} must be staggered`);
+  assert.match(fan, /Worked example/);
+  assert.match(fan, /five tool calls/, "the worked example must show 5+ parallel tool calls");
+  const numbered = fan.match(/^\d+\. `(Bash|WebSearch|WebFetch)`/gm) || [];
+  assert.ok(numbered.length >= 5, `worked example lists ${numbered.length} tool calls; want at least 5`);
+  assert.match(fan, /Topic slug: <topic-slug>/, "the researcher brief template is missing");
+  assert.match(fan, /Trace file: <literal path/);
+  assert.ok(fan.includes(`Scripts dir: ${SKILL_SCRIPTS_PREFIX}`), "the brief must hand the researcher the resolved scripts directory");
+  assert.match(fan, /foreground/, "researchers are launched in the foreground and awaited");
+  assert.match(fan, /every source is still read in full/i, "the iron law must be restated for the fan-out");
+  assert.match(fan, /never launches researchers/);
+  const tracing = section(body, "## Tracing");
+  assert.match(tracing, /`research\.fanout`/);
+  assert.match(tracing, /"angles":\["technical","expert","contested"\],"parallel":true/);
+});
+
+test("research skill: the merge rules are explicit", () => {
+  const merge = between(body, "### Merging angle fragments", "### Evidence tiers");
+  assert.match(merge, /Dedupe sources by normalised URL/);
+  assert.match(merge, /utm_\*/);
+  assert.match(merge, /Keep the highest tier when duplicated/);
+  assert.match(merge, /lowest tier number wins/);
+  assert.match(merge, /neighbour found by two angles is stored once/);
+  assert.match(merge, /When two angles disagree, both views go to Contested/);
+  assert.match(merge, /Build the concept file.s sections from the fragments/);
+  assert.match(merge, /Do not delete fragments/);
+  assert.match(merge, /research -> merge/);
+  assert.match(merge, /merge -> teach/);
+  assert.match(merge, /\.research\/<concept-slug>-<angle>\.md/);
+  assert.match(merge, /\.research\/sources-<angle>\.md/);
+  assert.match(merge, /\[source: URL or title\]/, "fragment facts cite the URL or title, not a concept file");
+});
+
 test("research skill: trace events name the real provider", () => {
   const tracing = section(body, "## Tracing");
   assert.match(tracing, /`research\.query`/);

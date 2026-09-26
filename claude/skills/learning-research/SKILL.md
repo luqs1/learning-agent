@@ -37,7 +37,8 @@ This skill appends events to the session trace file the Learning agent created a
 
 - `research.query` after every search: `{"provider":"<provider>","query":"<query>","material_type":"<docs|paper|blog|talk|dataset|news|other>"}`. `provider` is the real thing you called: the script name (`arxiv.sh`, `s2.sh`, `hn.sh`, `edgar.sh`, ...) or the tool name (`WebSearch`, `mcp__exa__web_search_exa`, `mcp__exa__web_search_advanced_exa`, `mcp__plugin_context7_context7__query-docs`) — never a generic label. Map the `Type` column to `material_type`: paper→`paper`, docs→`docs`, article/first-party→`blog`, video/course→`talk`, dataset/filing→`dataset`, news→`news`, anything else→`other`.
 - `research.fetch` after every fetch: `{"url":"<url>","ok":true}` (or `false` if the fetch failed or returned nothing useful). A fetch is any read of a source: `fetch-readable.sh`, `yt-transcript.sh`, `WebFetch`, `mcp__exa__web_fetch_exa`, a `curl` of a PDF/image you then `Read`, a clone.
-- `kb.write` after every file you create or update in the topic folder: `{"file":"<concept-slug>.md"}` (also for `sources.md`, and for entity files as `companies/<slug>.md`)
+- `kb.write` after every file you create or update in the topic folder: `{"file":"<concept-slug>.md"}` (also for `sources.md`, for entity files as `companies/<slug>.md`, and for research fragments as `.research/<concept-slug>-<angle>.md`)
+- `research.fanout` once per fresh concept, immediately before the angle searches or the researcher subagents are launched (Phase 3b): `{"angles":["technical","expert","contested"],"parallel":true}`. Only the agent that launches the fan-out emits it; a researcher working one angle never does.
 
 Keep values under 200 characters, use only double quotes inside the JSON, never put a single quote in a value. Several events may be chained in one command with `&&`. Do not mention tracing to the user.
 
@@ -57,7 +58,9 @@ Every script:
   which print the text you are meant to read)
 - exits `1` with a message on stderr on failure, and `2` when a provider needs
   an API key that is not set — the stderr message names the keyless fallback
-- is safe to run several at once (no shared temp files)
+- is safe to run several at once (no shared temp files) — and
+  `${CLAUDE_SKILL_DIR}/scripts/fanout.sh` runs several of them in one call,
+  staggering the rate-limited hosts (Phase 3b)
 
 Free, keyless providers are the **default path**. Keyed providers are used
 only when their environment variable is set; nothing in this skill requires a
@@ -208,6 +211,106 @@ customers and practitioners say** (sentiment rows), **(3) where sources
 disagree** (press number vs. filing number; analyst estimate vs. statistical
 body). Record every disagreement.
 
+## Phase 3b: Fan-out — run the angles in parallel
+
+The three angles are independent until the merge, and so are the searches
+inside each angle. A fresh concept therefore takes **at most four assistant
+turns**, never one search per turn:
+
+1. **Search turn** — emit `research.fanout`, then every search, in ONE message.
+2. **Fetch turn** — every fetch for the sources you chose, plus the Phase 5
+   similarity queries (they only need the ids the search results gave you), in
+   ONE message.
+3. **Read turn** — `Read` every downloaded file, in ONE message.
+4. **Write turn** — the concept file, `sources.md`, the trace events.
+
+Two ways to do it. Use **A** when you can, **B** otherwise.
+
+### A. Researcher subagents (one message, three launches)
+
+If you have an agent-launching tool and the `learning-researcher` agent is
+available — in Claude Code the `Agent` tool with
+`subagent_type: "learning-agent:learning-researcher"`, in opencode the `task`
+tool with `subagent_type: "learning-researcher"` — launch **three researchers
+in ONE message**, one per angle, and do no searching yourself while they run.
+Emit `research.fanout` first. Each launch carries this brief (fill every
+line; the researcher has no other context):
+
+```
+Topic slug: <topic-slug>
+Concept: <concept-slug> — <one line: what the learner needs to understand>
+Angle: technical | expert | contested        (market research: primary-documents | customers | disagreements,
+                                              or one sub-question: company-facts, funding, competitor-product,
+                                              customer-sentiment, market-size, news, patents)
+KB root: <absolute path of the knowledge-base root>   (topic folder: <root>/<topic-slug>/)
+Trace file: <literal path of this session's trace file>
+Scripts dir: ${CLAUDE_SKILL_DIR}/scripts   (absolute; this skill's SKILL.md is one level up)
+Already have: <URLs already in sources.md, or "nothing">
+Learner: <level and what they said>; questions to answer: <1–3 bullets>
+```
+
+Launch them in the foreground (no background flag) and wait for all three;
+the `Scripts dir` line is what lets a researcher find the helper scripts and
+this exact skill text even when a same-named skill elsewhere on the machine
+shadows the plugin copy. Each researcher runs the routing table for its
+angle, reads its sources in full, and writes
+`<root>/<topic-slug>/.research/<concept-slug>-<angle>.md` plus rows in
+`.research/sources-<angle>.md`. When all three return, go to
+**Merging angle fragments** in Phase 6. If one returns nothing usable, run
+that angle yourself with B before merging — Angle 2 is not optional. A
+researcher never launches researchers; inside one, use B.
+
+### B. Multi-call fan-out (no subagents, or inside a researcher)
+
+Put every independent call in the **same** assistant message as separate tool
+calls. Bundle the helper scripts into one `fanout.sh` call; built-in tools
+(`WebSearch`, `WebFetch`, context7, Exa) are their own tool calls beside it.
+
+`${CLAUDE_SKILL_DIR}/scripts/fanout.sh '<cmd>' '<cmd>' ...` (or one command
+per line on stdin) runs the commands concurrently — bare script names work,
+the scripts directory is on its PATH — and prints one JSON object per
+command, in input order: `{i, cmd, host, exit, ms, stdout, stderr, truncated}`.
+Same-host calls are serialised and started at least the provider's minimum
+gap apart, so **rate-limited providers must go through `fanout.sh` or appear
+at most once per message**: arXiv (1 request / 3 s), GDELT `news.sh --gdelt`
+(1 / 5 s), Wayback CDX (1 / s), Reddit RSS (1 / 2 s), Semantic Scholar
+(shared keyless pool, 429s). SEC EDGAR allows 10 / s and everything else has
+no practical limit at this scale. `fanout.sh --help` lists the table. Exports
+`LA_OUT`, a scratch directory the commands can write `--out` files into.
+
+**Worked example** — fresh topic `hash-tables`, concept `hash-collisions`,
+Claude Code. *Search turn*, one message, five tool calls:
+
+1. `Bash`: `echo '{"ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","event":"research.fanout","data":{"angles":["technical","expert","contested"],"parallel":true}}' >> <trace-file>` chained with `&&` to one `research.query` echo per search below (the queries are known before the results are)
+2. `Bash`: `${CLAUDE_SKILL_DIR}/scripts/fanout.sh 'arxiv.sh "hash table collision resolution" --max 5' 'openalex.sh search "open addressing versus separate chaining" --limit 5' 'hn.sh "hash table collisions" --stories --limit 10' 'wikimedia-images.sh "hash table diagram" --limit 5'` — technical (papers), expert (what practitioners argue about), figures
+3. `WebSearch`: `Python dict implementation open addressing site:docs.python.org` — technical, official docs
+4. `WebSearch`: `"hash table" collisions "what actually matters" OR "common misconception"` — expert
+5. `WebSearch`: `hash table open addressing vs chaining debate cache performance limitations` — contested
+
+*Fetch turn*, one message, three tool calls, after choosing sources from the
+results:
+
+1. `Bash`: `${CLAUDE_SKILL_DIR}/scripts/fanout.sh 'fetch-readable.sh https://docs.python.org/3/faq/design.html --out "$LA_OUT/python-faq.txt"' 'fetch-readable.sh <practitioner post url> --out "$LA_OUT/post.txt"' 'curl -sL <pdf_url> -o "$LA_OUT/paper.pdf"' 's2.sh recommend arXiv:<id> --limit 3' 'curl -sL <thumb_url> -o "$LA_OUT/diagram.png"'`
+2. `WebFetch` of the one JS-rendered page `fetch-readable.sh` could not extract
+3. `Bash`: the `research.fetch` events for every fetch above and the `research.query` for the `s2.sh recommend`, chained with `&&`
+
+*Read turn*: one message with a `Read` per file in `$LA_OUT` (the PDF with
+`pages`). *Write turn*: the concept file, `sources.md`, `kb.write` events. Four
+turns; two of them contain searches. Six searches one per turn would have been
+twelve.
+
+Rules for both A and B:
+
+- The iron law does not bend for speed: every source is still read in full
+  (Phase 4) before it is cited; a fan-out only changes *when* the calls are
+  issued, never whether the content reaches your context.
+- Emit `research.query` for every search and `research.fetch` for every fetch,
+  exactly as in Tracing, whichever tool ran it — chain the echoes into one
+  Bash call per turn.
+- Do not wait for one search to pick the next when the next does not depend on
+  it. Only a dependent call (the fetch of a URL a search returned, the
+  `s2.sh recommend` of an id a search returned) belongs in a later turn.
+
 ## Phase 4: Reading, not skimming
 
 A search result is a pointer. **You have not read a source until its content
@@ -237,7 +340,9 @@ Rules:
 After **each** primary source you store, run **one** similarity query and store
 2–3 neighbours in `sources.md` with `Related-to` set to the primary's URL.
 This is how the knowledge base grows edges, not just nodes: the follow-up
-paper, the rebuttal, the competitor you had not heard of.
+paper, the rebuttal, the competitor you had not heard of. The similarity
+queries need only the ids the search turn returned, so they belong in the
+fetch turn of Phase 3b, alongside the fetches — not one per turn afterwards.
 
 | Primary source type | Similarity query |
 |---|---|
@@ -301,6 +406,70 @@ Cells must be parseable: `Tier` is exactly one digit `1`–`5`; `Published` and
 from the list above; put any qualifier ("official docs", "accessed via
 summary", "not yet read") in the Summary cell, never in the Tier cell.
 
+### Merging angle fragments
+
+When the angles were researched by fan-out (Phase 3b A, or B with fragments),
+the concept file and `sources.md` are built from the fragments under
+`<topic-slug>/.research/`, and the fragments stay there afterwards as the
+audit trail of who found what. Emit `phase` `research -> merge` first, then:
+
+**Fragment format.** A researcher writes `.research/<concept-slug>-<angle>.md`:
+
+```markdown
+# <Concept name> — <angle>
+
+Angle: technical | expert | contested | <market-research sub-question>
+Queries run: <provider: query> one per line
+Sources read in full: <count>
+
+## Facts
+1. <fact>. [source: URL or title] (page, section or timestamp) — Tier <1–5> — "<short verbatim quote>"
+
+## Disagreements noticed
+- <what source A says> vs <what source B says> — both URLs
+
+## For other angles
+- <anything found that belongs to another angle, one line each, with URL>
+
+## Figures / media
+- <file page URL — what it shows — viewed: yes/no>
+```
+
+and `.research/sources-<angle>.md`: the `sources.md` header followed by one
+row per source, same columns, same cell rules.
+
+**Merge rules** (apply them in this order; they are not optional):
+
+1. **Dedupe sources by normalised URL.** Normalise before comparing: lowercase
+   scheme and host, drop `www.`, drop the `#fragment`, drop `utm_*` and `ref`
+   query parameters, drop a trailing `/`, treat `http` and `https` as the same,
+   and treat an arXiv `abs`, `pdf` and version-suffixed URL of one paper as one
+   source. One row per normalised URL in `sources.md`.
+2. **Keep the highest tier when duplicated** — the lowest tier number wins; the
+   row that was actually read wins over one marked `not yet read`; keep the
+   earliest `Published`, the latest `Accessed`, and join the Summaries with
+   `;` (keep both angles' one-liners; do not pick one).
+3. **A neighbour found by two angles is stored once**: one row, `Related-to`
+   set to the primary it was found from first, and "also related to <other
+   primary URL>" in the Summary cell.
+4. **When two angles disagree, both views go to Contested.** If two fragments
+   state incompatible things about the same point (a number, a mechanism, a
+   recommendation), neither goes into Technical Facts as settled: put both
+   statements under *Contested / Uncertain*, each with its source and tier,
+   and say what would resolve it. Never pick a winner silently, and never
+   average two numbers.
+5. **Build the concept file's sections from the fragments**: *Technical Facts*
+   from the technical fragment's Facts (renumbered, source pointers kept);
+   *Expert Perspective* and *What NOT to Over-Emphasize* from the expert
+   fragment; *Contested / Uncertain* from the contested fragment plus every
+   cross-angle disagreement from rule 4 and every "Disagreements noticed"
+   line; *Figures / media* from all three; *Sources used* from the merged
+   rows. Facts under "For other angles" go to the section they belong to.
+6. Then `kb.write` for `sources.md` and the concept file, and `phase`
+   `merge -> teach`. Cite only the merged concept file when teaching —
+   never a `.research/` fragment. Do not delete fragments; a later session
+   re-reads them before re-researching.
+
 ### Evidence tiers
 
 General (learning) material:
@@ -358,6 +527,7 @@ After storing, produce a brief internal summary:
 Research complete for: [concept]
 Files created/updated: [list]
 Providers used: [list, with keyless/keyed noted]
+Fan-out: [researchers | multi-call; number of assistant turns that contained searches]
 Key verified facts: [bullet list, each with tier]
 Key expert perspectives gathered: [bullet list]
 Adjacent material stored: [count, and anything worth following up]
@@ -386,6 +556,8 @@ If a topic folder already exists with research from a prior session:
 - NEVER store a claim without a URL or direct reference, a date, and a tier.
 - NEVER cite a market number (funding, revenue, users, valuation, market size) above Tier 2 without saying so.
 - ALWAYS run `--help` on a script before its first use in a session, and pass the script's stderr message on to the user when a provider is unavailable.
+- NEVER issue independent searches one per turn. Fan them out (Phase 3b): all searches in one message, all fetches in one message; rate-limited hosts through `fanout.sh` or once per message.
+- NEVER cite a `.research/` fragment. Merge first (Phase 6); the concept file is the only citable output. Disagreements between angles go to Contested, never silently resolved.
 - Prefer the keyless path; never ask the user for an API key mid-session — degrade and continue.
 - If a source contradicts training knowledge, trust the source.
 - If sources contradict each other, record both views in the Contested section.

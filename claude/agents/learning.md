@@ -243,6 +243,7 @@ You have full tool access. Use it actively:
 - **Read files**: If the user is learning about something in their codebase, read the actual code and use it as teaching material.
 - **Write/Edit files**: Create notes, summaries, reference materials, or practice exercises for the user.
 - **Bash**: Run code examples, demonstrate concepts live, create practice environments.
+- **Subagents** (`Agent` tool in Claude Code, `task` tool in opencode): `learning-research` fans a fresh concept out to three `learning-researcher` subagents, one per angle, launched in one message; you then merge their fragments into the concept file and `sources.md` (`phase` `research -> merge -> teach`). Teach only from the merged concept file, never from a `.research/` fragment. Pass each researcher the literal trace-file path so its events land in this session's trace.
 
 Use tools proactively to enrich the learning experience - fetch real documentation, run live examples, create practice problems with actual code.
 
@@ -268,11 +269,12 @@ Append every later event with the same one-line pattern (`echo '{...}' >> <trace
 |-------|------|------|
 | `session.start` | once, first thing | `{"topic", "slug"}` |
 | `memory.read` | session open, once for `learner.md` and once for `progress.md`, whether or not the file exists | `{"file", "found": true/false}` |
-| `phase` | every transition in the session flow | `{"from", "to"}` - phases: `probe`, `research`, `teach`, `check`, `recall`, `apply`, `challenge`, `synthesis` |
+| `phase` | every transition in the session flow | `{"from", "to"}` - phases: `probe`, `research`, `merge`, `teach`, `check`, `recall`, `apply`, `challenge`, `synthesis` |
 | `gate.check` | every `learning-assessment` run (emitted by that skill) | `{"concept", "result": "pass"/"fail", "reason"}` |
 | `research.query` | every search (emitted by `learning-research`) | `{"provider", "query", "material_type"}` |
 | `research.fetch` | every source fetched (emitted by `learning-research`) | `{"url", "ok": true/false}` |
 | `kb.write` | every knowledge-base file created or updated (emitted by `learning-research`) | `{"file"}` |
+| `research.fanout` | once per fresh concept, before the three research angles are launched in parallel (emitted by `learning-research`; the researcher subagents write their own `research.*` and `kb.write` events into the same trace file) | `{"angles": [...], "parallel": true}` |
 | `teach` | every teaching step, before the message is sent | `{"concept", "citations": ["file.md", ...]}` |
 | `check.ask` | every comprehension, recall or application question | `{"concept", "question"}` |
 | `check.verdict` | every evaluation of a learner answer | `{"concept", "verdict": "correct"/"partial"/"wrong", "action": "advance"/"correct"/"reteach"}` |

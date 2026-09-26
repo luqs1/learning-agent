@@ -63,6 +63,7 @@ export function scenarioReport(run) {
   lines.push("");
   if (kb.learner) lines.push(`- learner.md (${kb.learner.split("\n").length} lines, at the KB root)`);
   for (const f of Object.keys(kb.files).sort()) lines.push(`- ${f} (${kb.files[f].split("\n").length} lines)`);
+  for (const f of Object.keys(kb.fragments || {}).sort()) lines.push(`- ${f} (${kb.fragments[f].split("\n").length} lines, research fragment)`);
   if (!Object.keys(kb.files).length && !kb.learner) lines.push("(none)");
   lines.push("");
   lines.push("## Transcript");
@@ -74,8 +75,11 @@ export function scenarioReport(run) {
     lines.push("");
     const tools = t.agent.blocks.filter((b) => b.type === "tool").map((b) => `${b.name}${b.summary ? `(${b.summary})` : ""}`);
     if (tools.length) lines.push(`*Tools (${tools.length}):* ${tools.join(", ")}`);
+    const subs = t.agent.subagents || [];
+    if (subs.length) lines.push(`*Subagents (${subs.length}):* ${subs.map((s) => `${s.type}${s.description ? `(${s.description})` : ""}`).join(", ")}; ${(t.agent.subagentToolNames || []).length} tool calls inside them`);
+    const topLevel = (t.agent.messages || []).filter((m) => !m.parent).length;
     lines.push("");
-    lines.push(`**Agent** (${t.agent.numTurns} model turns, $${(t.agent.costUsd || 0).toFixed(2)}, ${Math.round((t.agent.endedAt - t.agent.startedAt) / 1000)}s):`);
+    lines.push(`**Agent** (${t.agent.numTurns} model turns${topLevel ? `, ${topLevel} top-level assistant messages` : ""}, $${(t.agent.costUsd || 0).toFixed(2)}, ${Math.round((t.agent.endedAt - t.agent.startedAt) / 1000)}s):`);
     lines.push("");
     lines.push(t.agent.text || "(no text)");
     if (t.agent.error) lines.push(`\n*Turn error:* ${t.agent.error}`);

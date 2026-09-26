@@ -9,7 +9,8 @@
   "scripts": {
     "test": "node --test \"tests/lint/**/*.test.mjs\"",
     "test:scenarios": "node tests/scenarios/run.mjs",
-    "trace": "node scripts/trace-summary.mjs"
+    "trace": "node scripts/trace-summary.mjs",
+    "sync:opencode": "bash scripts/sync-opencode.sh"
   },
   "engines": {
     "node": ">=22"
