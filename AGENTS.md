@@ -38,9 +38,20 @@ Three cooperating parts plus a slash command:
   with per-host staggering for the rate-limited providers.
 - **`learn` (slash command, Claude Code only)** — forks a learning session on a
   given topic.
+- **`research` (slash command, Claude Code only)** — forks the same agent in
+  **research mode**: gauge (hypothesis + evidence, never skipped) → read
+  venture context and the existing KB → plan sub-questions against the
+  routing table → gate → fan the sub-questions out to `learning-researcher`
+  subagents (one per sub-question, as the angles) → merge → store one entity
+  per file → brief → challenge
+  (Jadal) → next questions. The brief is sent to the user and written to
+  `<kb-root>/<topic-slug>/brief-<YYYY-MM-DD>.md`. The mode is defined in the
+  agent prompt ("Research Mode" section); the agent also enters it from a
+  plain session when the request reads as a research question.
 
 Runtime flow: **assessment gate → research if it fails (fan out three angles →
-merge) → teach with `[source: filename.md]` citations.**
+merge) → teach with `[source: filename.md]` citations** (research mode: the
+same gate and fan-out, then a cited brief instead of a lesson).
 
 ## Repository layout
 
@@ -61,6 +72,7 @@ merge) → teach with `[source: filename.md]` citations.**
 │   │   └── learning-researcher.md    # one-angle research subagent (tools restricted, skill preloaded)
 │   └── skills/
 │       ├── learn/SKILL.md            # slash command (Claude only)
+│       ├── research/SKILL.md         # /research <question> slash command (Claude only)
 │       ├── learning-assessment/SKILL.md
 │       └── learning-research/
 │           ├── SKILL.md
@@ -76,7 +88,7 @@ merge) → teach with `[source: filename.md]` citations.**
 │               └── fetch-readable.sh                                          # URL → readable text
 │
 ├── .opencode/
-│   └── plugins/learning-agent.js     # registers the opencode agents + skills at runtime
+│   └── plugins/learning-agent.js     # registers the opencode agents (learning, learning-researcher, researcher), the /research command + skills
 ├── opencode/                         # ── OPENCODE plugin assets ──
 │   ├── agents/
 │   │   ├── learning.md               # agent prompt (opencode flavour)
@@ -146,10 +158,28 @@ other. The **only intended differences** between the copies are:
      is the documented fallback on either platform when no subagent tool is
      available, and is what a researcher uses inside its own angle.
 
-The `learn` slash command lives **only** under `claude/` (opencode has no
-slash-command equivalent here). Everything else should match. Two opencode
-files are derived mechanically from their Claude copies by
-`scripts/sync-opencode.sh` (`npm run sync:opencode`):
+5. **Research mode entry point:**
+   - Claude Code → `claude/skills/research/SKILL.md`, a user-invocable
+     slash command (`/research <question>`, `context: fork`,
+     `agent: learning`) whose body tells the agent to enter research mode.
+   - opencode → no command file. `.opencode/plugins/learning-agent.js`
+     registers a second primary agent, **`researcher`**, whose prompt is the
+     learning prompt (`opencode/agents/learning.md`) with a short `# Mode`
+     preamble prepended, plus a **`/research`** command (`config.command`)
+     that runs on it with the same template text as the Claude skill. Chosen
+     over a `research:` prefix because opencode's config hook accepts
+     `agent` and `command` maps directly, so users get Tab-selectable
+     `researcher` and `/research <question>` with nothing to remember. The
+     rules of the mode live only in the prompt file; the preamble and the
+     command template are mode lines, and the lint checks the researcher
+     prompt ends with the learning prompt verbatim.
+
+The `learn` and `research` slash commands live **only** under `claude/`
+(opencode registers `/research` in code, see above). Everything else should
+match. Three opencode files are derived mechanically from their Claude copies
+by `scripts/sync-opencode.sh` (`npm run sync:opencode`): the research skill,
+the researcher subagent, and the main agent prompt `opencode/agents/learning.md`
+(opencode frontmatter kept, Claude body with the KB path swapped):
 
 ```bash
 # opencode/skills/learning-research/SKILL.md
@@ -159,6 +189,8 @@ sed -e '/^user-invocable: false$/d' -e '/^allowed-tools: /d' \
     claude/skills/learning-research/SKILL.md > opencode/skills/learning-research/SKILL.md
 # opencode/agents/learning-researcher.md: description / mode: subagent / color
 # frontmatter, then the Claude body with the KB path swapped (see the script).
+# opencode/agents/learning.md: its own frontmatter kept, the Claude body with
+# the KB path swapped.
 ```
 
 Edit the Claude copy, run the sync script, and commit both. `npm test` (the
@@ -225,7 +257,15 @@ When bumping the version, update it in all three manifests:
 - One `<concept-slug>.md` file per concept. Market-research topics add
   `companies/<company-slug>.md`, `market-size.md`, `customers.md`,
   `timeline.md`; learning topics may add `courses.md`.
-- Inline citation format is `[source: filename.md]`.
+- Research mode writes its brief to `brief-<YYYY-MM-DD>.md` in the topic
+  folder (one per day, accumulating across sessions; a returning session reads
+  the latest first and opens with what changed). Sections, in order: Question ·
+  Hypothesis (the user's, verbatim) · Findings (cited, tiered) · Numbers
+  (`Value | What | Date | Source file | Tier`, Tier 1–2 only) · Contested /
+  Unknown (never empty; the only place a Tier 3+ number may appear, flagged
+  "unverified") · Counter-case · Next questions.
+- Inline citation format is `[source: filename.md]`, or
+  `[source: companies/<slug>.md]` for an entity file.
 - One concept (or entity) per file; split files that exceed ~200 lines.
 - On returning to an existing topic, **read what's there before researching** —
   only fill gaps, don't re-research.
@@ -265,14 +305,17 @@ Full details in [tests/README.md](./tests/README.md). The short version:
   `user-invocable: false`, a `[source: ...]` example in the wrong format, any
   wording that permits skipping the probing question, a missing trace event in
   either tree, a researcher subagent missing from either tree or registered
-  wrongly, a broken `fanout.sh`, or a broken scenario fixture. Run it before
+  wrongly, a broken `fanout.sh`, a research-mode section that lost its
+  template or evidence rules, or a broken scenario fixture. Run it before
   every commit that touches a prompt or skill. CI runs it on every PR.
 - **`npm run test:scenarios`** — drives the real agent (`claude -p`) through
   scripted learner sessions and checks the transcript, the knowledge base and
   the trace: gate before the first claim, citations resolve to real files,
   `sources.md` rows rated and dated, probing question first, no lecturing
-  streaks, wrong answers corrected rather than advanced, plus medicine and
-  market-research extras. Costs tokens; runs nightly and on demand in CI,
+  streaks, wrong answers corrected rather than advanced, plus medicine,
+  market-research and research-mode extras (`mode: research` fixtures:
+  gauging question first, Numbers rows Tier 1–2 and resolvable, Contested /
+  Unknown populated, brief written). Costs tokens; runs nightly and on demand in CI,
   gated on the `ANTHROPIC_API_KEY` secret. Reports land in
   `tests/scenarios/.runs/<stamp>/` (git-ignored).
 - **Adding a scenario** = adding one YAML file at
@@ -285,13 +328,14 @@ Full details in [tests/README.md](./tests/README.md). The short version:
   `<kb-root>/.traces/<topic-slug>/<timestamp>.jsonl`, one `{ts, event, data}`
   per line (`session.start`, `memory.read`, `phase`, `gate.check`,
   `research.fanout`, `research.query`, `research.fetch`, `kb.write`, `teach`,
-  `check.ask`, `check.verdict`, `memory.write`, `session.end`). `npm run trace`
-  prints the latest one as a timeline; a `teach` with no preceding
-  `gate.check`, or a `check.verdict` of `wrong -> advance`, is a regression,
-  and so are `research.query` events spread over many assistant turns for a
-  fresh topic (the `research_rounds_max` assertion counts them). Set
-  `LEARNING_KB_ROOT` to point the agent (and its traces) at a different root;
-  the test harness does this.
+  `check.ask`, `check.verdict`, `memory.write`, `brief.write`, `session.end`;
+  research mode uses the phases `gauge`, `plan`, `research`, `merge`, `brief`,
+  `challenge`). `npm run trace` prints the latest one as a timeline; a `teach`
+  with no preceding `gate.check`, or a `check.verdict` of `wrong -> advance`,
+  is a regression, and so are `research.query` events spread over many
+  assistant turns for a fresh topic (the `research_rounds_max` assertion counts
+  them). Set `LEARNING_KB_ROOT` to point the agent (and its traces) at a
+  different root; the test harness does this.
 - When you add a trace event or change the `sources.md` layout, update **both**
   agent prompts / skills and the tables in `tests/README.md`; the lint checks
   the trees agree.

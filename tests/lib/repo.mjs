@@ -43,11 +43,21 @@ export const MIRRORED = [
   ["claude/skills/learning-research/SKILL.md", "opencode/skills/learning-research/SKILL.md"],
 ];
 
-// Files that exist in exactly one tree, by design.
+// Files that exist in exactly one tree, by design. The Claude-only slash
+// commands (`learn`, `research`) have no file under opencode/: the opencode
+// plugin registers the `researcher` agent and the `/research` command in
+// code (.opencode/plugins/learning-agent.js) from the same prompt file.
 export const PLATFORM_ONLY = {
-  claude: ["claude/skills/learn/SKILL.md", "claude/.claude-plugin/plugin.json"],
+  claude: ["claude/skills/learn/SKILL.md", "claude/.claude-plugin/plugin.json", "claude/skills/research/SKILL.md"],
   opencode: [],
 };
+
+// The user-invocable slash commands under claude/skills/, each forking into
+// the learning agent: [name, file].
+export const CLAUDE_COMMANDS = [
+  ["learn", "claude/skills/learn/SKILL.md"],
+  ["research", "claude/skills/research/SKILL.md"],
+];
 
 export const SHARED_SKILLS = ["learning-assessment", "learning-research"];
 
@@ -99,6 +109,8 @@ export function listFiles(relDir) {
 // The documented inline citation format, and the only other `[source: ...]`
 // spelling the prompts are allowed to contain (the concept-file template in
 // learning-research cites the raw URL/title inside knowledge-base files).
+// A cited file is `name.md` or, for market-research entity files, one
+// subdirectory deep (`companies/name.md`).
 export const CITATION_RE = /\[source: ([^\]]+)\]/g;
-export const CITATION_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.md$/;
+export const CITATION_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)?\.md$/;
 export const CITATION_PLACEHOLDERS = new Set(["filename.md", "URL or title"]);

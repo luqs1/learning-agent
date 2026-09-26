@@ -76,7 +76,28 @@ Memory never replaces the opening question. When you return to a topic the agent
 
 ### Use it for research
 
-The same verify-and-cite engine works for questions that are not lessons — sizing a market, mapping funded competitors, checking a hypothesis against the evidence. A dedicated research mode that swaps the teaching loop for a brief-building loop (every number cited, contested and unknown areas called out) is coming via [issue #9](https://github.com/luqs1/learning-agent/issues/9); until then, the teaching mode will still research and cite, it just insists on teaching you along the way.
+The same verify-and-cite engine works for questions that are not lessons — sizing a market, mapping funded competitors, checking a hypothesis against the evidence. **Research mode** keeps everything that makes the tool trustworthy (the assessment gate, *no claim without a source*, the knowledge base, `[source: file.md]` citations, honesty about what is unknown) and swaps the teaching loop for a brief-building loop.
+
+How to start it:
+
+- **Claude Code:** `/research <question>` from any session, e.g. `/research who else is doing AI-driven KYB for UK fintechs, and how are they funded?` — or run `claude --agent learning-agent:learning` and just ask; the agent recognises a research question ("size the UK market for X", "who are the funded competitors in Y", "what does the evidence say about Z", "brief me on…") and says in one line that it is treating it as one.
+- **opencode:** select the **researcher** agent (Tab) and ask, or type `/research <question>` in any session.
+
+What happens: the agent first asks for **your current hypothesis and the evidence you already have** (never skipped — the brief is built to test *your* claim, not to replace it), reads what it already knows about your venture and the topic, shows you a two-to-five-line plan of sub-questions, researches each against primary sources (filings, statistical series, the company's own pages, forums for sentiment), and returns a brief:
+
+| Section | What it holds |
+|---|---|
+| Question | as you asked it |
+| Hypothesis | yours, verbatim |
+| Findings | each cited to a knowledge-base file, with its evidence tier |
+| Numbers | a `Value · What · Date · Source file · Tier` table — only Tier 1–2 sources (a filing, an official statistic, the company's own announcement) |
+| Contested / Unknown | mandatory and never empty: where sources disagree, what could not be verified (a paywalled analyst figure lives here, flagged "unverified", never in Numbers), what nobody has measured |
+| Counter-case | the strongest evidence-backed argument *against* your hypothesis |
+| Next questions | what would falsify the hypothesis, and where to look |
+
+Company self-reports are written as "X says"; a Crunchbase or Statista number is never presented as fact. Every brief ends with one question back to you — usually whether the counter-case changes your hypothesis.
+
+Where it goes: the brief is written to `<knowledge base>/<topic>/brief-<YYYY-MM-DD>.md` (`~/.claude/learning/...` in Claude Code, `~/.config/opencode/learning/...` in opencode), next to the entity files it cites (`companies/<name>.md`, `market-size.md`, `customers.md`, `timeline.md`, `sources.md`). Briefs accumulate: come back to the same topic and the agent reads the latest brief first and opens with what changed. The hypothesis and its status (untested / validated / falsified, dated) are recorded under *Venture context* in your `learner.md`.
 
 ### Search providers and API keys
 
@@ -117,7 +138,7 @@ opencode plugin learning-agent@git+https://github.com/luqs1/learning-agent.git -
 
 This installs the plugin globally and registers the learning agent and its sub-skills automatically. Restart opencode after installing.
 
-Select the **learning** agent from the agent list (Tab key) to start a session.
+Select the **learning** agent from the agent list (Tab key) to start a session, or the **researcher** agent for a research brief (`/research <question>` also works from any session).
 
 Knowledge base is stored at `~/.config/opencode/learning/<topic-slug>/`.
 
@@ -155,7 +176,7 @@ alias learn='claude --agent learning-agent:learning'
 
 **Quick fork via slash command:**
 
-Inside any Claude Code session, type `/learn <topic>`. This spins up the learning agent in a temporary forked context — good for "quick, teach me this thing" moments without leaving what you're doing.
+Inside any Claude Code session, type `/learn <topic>`. This spins up the learning agent in a temporary forked context — good for "quick, teach me this thing" moments without leaving what you're doing. `/research <question>` does the same in research mode (see [Use it for research](#use-it-for-research)).
 
 Knowledge base is stored at `~/.claude/learning/<topic-slug>/`.
 

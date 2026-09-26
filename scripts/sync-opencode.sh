@@ -4,6 +4,7 @@
 #
 #   claude/skills/learning-research/SKILL.md  -> opencode/skills/learning-research/SKILL.md
 #   claude/agents/learning-researcher.md      -> opencode/agents/learning-researcher.md
+#   claude/agents/learning.md                 -> opencode/agents/learning.md (body only)
 #
 # Edit the Claude copy, run `npm run sync:opencode`, commit both. The parity
 # lint (`npm test`) fails on any other drift.
@@ -29,4 +30,15 @@ dst=opencode/agents/learning-researcher.md
   awk 'f>=2{print} /^---$/{f++}' "$src" | sed 's#~/.claude/learning#~/.config/opencode/learning#g'
 } > "$dst"
 
-echo "synced: opencode/skills/learning-research/SKILL.md, $dst"
+# The main agent prompt: keep opencode's own frontmatter (description / mode /
+# color, hand-maintained), replace the body with the Claude body, KB path swapped.
+src=claude/agents/learning.md
+main=opencode/agents/learning.md
+tmp=$(mktemp)
+{
+  awk 'f<2{print} /^---$/{f++}' "$main"
+  awk 'f>=2{print} /^---$/{f++}' "$src" | sed 's#~/.claude/learning#~/.config/opencode/learning#g'
+} > "$tmp"
+mv "$tmp" "$main"
+
+echo "synced: opencode/skills/learning-research/SKILL.md, $dst, $main"
