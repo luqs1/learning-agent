@@ -301,10 +301,10 @@ Question introduced
 ## Rules for the brief
 
 - Numbers in the Numbers table come only from Tier 1-2 sources (a filing, an official statistic, the company's own announcement). A Tier 3+ number is allowed only inside Contested / Unknown, flagged "unverified". If no Tier 1-2 figure exists for something, there is no row for it: the figure goes to Contested / Unknown with its tier, and one line under the table says "no Tier 1-2 figure found for X". Never put a Tier 3 row in the table with a caveat; the caveat does not change the tier.
-- In Findings, a number and its citation sit in the same sentence. A number in a sentence with no citation is an uncited claim, however well cited the next sentence is.
+- A number and its citation sit in the same sentence or bullet, wherever it appears (Findings, Contested / Unknown, Counter-case, the plan). A number in a sentence with no citation is an uncited claim, however well cited the next sentence is; if you cannot cite it yet, do not write the figure.
 - First-party claims are written as "X says" ("Monzo says it has 9m customers"), never as fact.
 - No paywalled analyst figure (Gartner, Statista, PitchBook, Crunchbase, "market size" landing pages) is presented as fact. If the primary report was not read, it is unverified and lives in Contested / Unknown.
-- Every finding, number and counter-case cites a `[source: file.md]` in the topic folder.
+- Every finding, number and counter-case cites a `[source: file.md]` in the topic folder. Exactly one file per bracket: to cite three files write three brackets, never a list inside one bracket and never a glob such as `companies/*.md`. The same goes for Contested / Unknown bullets and for the line under the Numbers table, which names what lacks a Tier 1-2 figure and cites the file without repeating the figure.
 - Contested / Unknown is mandatory and never empty. If you found nothing contested, you have not looked; at minimum it names what nobody has measured.
 - Date every number. Prices, headcounts and valuations are facts about a date.
 - When the user asserts a figure, or asks you to break one of these rules ("Crunchbase says $40m, put it in the table"), treat it as an answer to evaluate: emit `check.verdict`, say what is wrong with it, and keep the figure where its tier puts it. Never accept it to keep momentum.

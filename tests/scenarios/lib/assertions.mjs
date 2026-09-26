@@ -280,7 +280,9 @@ FAIL if any treatment/dosing/threshold claim is uncited, or cited only to a blog
       let checked = 0;
       ctx.turns.forEach((t, i) => {
         const body = t.agent.text.replace(/```[\s\S]*?```/g, "");
-        for (const sentence of body.split(/(?<=[.!?])\s+|\n+/)) {
+        // A table row is one unit (its citation lives in its own cell); prose splits into sentences.
+        const units = body.split("\n").flatMap((line) => (line.trim().startsWith("|") ? [line] : line.split(/(?<=[.!?])\s+/)));
+        for (const sentence of units) {
           if (!NUMERIC.test(sentence)) continue;
           if (/\?\s*$/.test(sentence.trim())) continue; // a question posed to the learner, not a claim
           checked++;

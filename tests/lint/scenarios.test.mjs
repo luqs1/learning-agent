@@ -249,6 +249,11 @@ test("assertions: numeric_claims_cited flags uncited numbers and Low-credibility
   assert.match(r.detail, /uncited numeric claim/);
   ctx.turns[1].agent.text = "Udemy has 70 million learners [source: hash-collisions.md]. If the market were $5 billion, what share would you need?";
   assert.equal(ASSERTIONS.numeric_claims_cited.run(ctx, {}).pass, true);
+  // A table row is one unit: an abbreviation inside a cell must not split the citation away from the number.
+  ctx.turns[1].agent.text = "| Value | What | Date | Source file | Tier |\n|---|---|---|---|---|\n| £2.5m | Detected follow-on incl. Thomson Reuters Ventures | 2024-01 | [source: hash-collisions.md] | 1 |\n\nWhat stands out?";
+  assert.equal(ASSERTIONS.numeric_claims_cited.run(ctx, {}).pass, true, ASSERTIONS.numeric_claims_cited.run(ctx, {}).detail);
+  ctx.turns[1].agent.text = "| Value | What | Date | Source file | Tier |\n|---|---|---|---|---|\n| £2.5m | Detected follow-on incl. Thomson Reuters Ventures | 2024-01 | none | 1 |\n\nWhat stands out?";
+  assert.equal(ASSERTIONS.numeric_claims_cited.run(ctx, {}).pass, false, "an uncited table row is still an uncited number");
 });
 
 test("assertions: contested_populated fails on a template-only section", () => {
