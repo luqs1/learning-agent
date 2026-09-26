@@ -86,12 +86,19 @@ fs.writeFileSync(path.join(runDir, "summary.md"), summaryMarkdown(runs, runDir, 
 console.log(`\nSummary: ${path.join(runDir, "summary.md")}`);
 process.exit(runs.every((r) => r.pass) ? 0 : 1);
 
+// Session cost from saved turns. Newer runs store sessionTotalUsd (the
+// cumulative figure claude -p reports); older runs stored that cumulative
+// figure in costUsd, so the maximum is right for both.
+function sessionCost(turns) {
+  return turns.reduce((a, t) => Math.max(a, t.agent.sessionTotalUsd ?? t.agent.costUsd ?? 0), 0);
+}
+
 async function evaluateExisting(scenario) {
   const dir = path.join(runDir, scenario.domain, scenario.name);
   const turns = JSON.parse(fs.readFileSync(path.join(dir, "turns.json"), "utf8"));
   const log = (msg) => console.log(`[${scenario.id}] ${msg}`);
   const startedAt = turns[0]?.agent.startedAt ?? Date.now();
-  const costUsd = turns.reduce((a, t) => a + (t.agent.costUsd || 0), 0);
+  const costUsd = sessionCost(turns);
   const error = turns.map((t) => t.agent.error).find(Boolean) ? "see turns.json" : null;
   return evaluate({ scenario, dir, turns, startedAt, costUsd, error, log });
 }
@@ -123,7 +130,11 @@ async function runScenario(scenario) {
       timeoutMs: turnTimeoutMs,
       log,
     });
-    costUsd += agent.costUsd || 0;
+    // `claude -p --resume` reports total_cost_usd for the whole session so far,
+    // not for this invocation: keep the running total and store the delta.
+    agent.sessionTotalUsd = agent.costUsd || 0;
+    agent.costUsd = Math.max(0, agent.sessionTotalUsd - costUsd);
+    costUsd = Math.max(costUsd, agent.sessionTotalUsd);
     turns.push({ learner: t.say, expect: t.expect, agent });
     if (agent.error) {
       log(`turn ${i + 1} error: ${agent.error}`);
