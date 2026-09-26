@@ -239,7 +239,8 @@ Question introduced
   -> Read learner.md (Venture context) and the topic folder, including the latest brief-*.md
   -> Plan: decompose into sub-questions, each mapped to a routing-table row
   -> Gate: learning-assessment on the question (gate.check); a new topic fails, which is what sends you to research
-  -> Research: learning-research for the plan; issue independent searches in one turn
+  -> Research: learning-research Phase 3b - fan the plan out to learning-researcher subagents, one sub-question each, in one message; otherwise issue independent searches in one turn
+  -> Merge: fold the fragments into the entity files (learning-research Phase 6)
   -> Store: one entity per file (companies/<slug>.md, market-size.md, customers.md, timeline.md)
   -> Brief: the template below, sent to the user AND written to brief-<YYYY-MM-DD>.md
   -> Challenge (Jadal): the strongest evidence-backed case against the hypothesis
@@ -252,7 +253,9 @@ Question introduced
 
 **Plan** (`phase` to `plan`). Break the question into sub-questions and map each to a material-type row of the market-research routing table in `learning-research` (company facts, funding, competitor product, customer sentiment, market size, industry reports, news, patents, trends). Show the plan to the user in two to five lines so they can redirect it before you spend the time. Then run `learning-assessment` on the question as a whole: it emits `gate.check`, and on a new topic it fails, which is what sends you into research. Never go from plan to `learning-research` without it; the gate is the same in both modes.
 
-**Research** (`phase` to `research`). Run `learning-research`. Issue independent searches in one turn, several `research.query` calls together and then read the results, rather than one search per turn. Read the primary document (the filing, the pricing page, the statistical series), not the snippet.
+**Research** (`phase` to `research`). Run `learning-research` and use its Phase 3b fan-out with the plan as the angles: launch one `learning-researcher` subagent per sub-question, all in ONE message, each brief's `Angle:` line naming the sub-question (`company-facts`, `funding`, `competitor-product`, `customer-sentiment`, `market-size`, `news`, `patents`). For a broad question with no clear sub-question split, use the three market-research angles instead (`primary-documents`, `customers`, `disagreements`). Launch at most as many researchers as the plan has sub-questions, and put what the user already told you (hypothesis, evidence in hand) on each brief's `Learner:` line. If no subagent tool is available, issue independent searches in one turn, several `research.query` calls together and then read the results, rather than one search per turn. Either way, read the primary document (the filing, the pricing page, the statistical series), not the snippet.
+
+**Merge** (`phase` to `merge`). When the researchers return, merge their `.research/` fragments into the entity files with the merge rules in `learning-research` Phase 6: a disagreement between two fragments goes to the entity file's Contested section and on to the brief's Contested / Unknown, never silently resolved. Never cite a fragment.
 
 **Store.** One entity per file, in the market-research layout: `companies/<company-slug>.md`, `market-size.md`, `customers.md`, `timeline.md`, with every source in `sources.md` carrying a tier. Each entity file names the URL or title of every source it draws on, next to the fact it supports (as the concept template does); never write `[source: sources.md]` inside an entity file, because a citation to the entity file must resolve to a tiered row. The brief cites these files, never a URL directly.
 

@@ -24,7 +24,7 @@ const TRACE_EVENTS = [
 ];
 
 // Research mode (#9) adds its own phase names to the `phase` event.
-const RESEARCH_PHASES = ["gauge", "plan", "research", "brief", "challenge"];
+const RESEARCH_PHASES = ["gauge", "plan", "research", "merge", "brief", "challenge"];
 // The brief template's section headings, in order.
 export const BRIEF_SECTIONS = ["Question", "Hypothesis", "Findings", "Numbers", "Contested / Unknown", "Counter-case", "Next questions"];
 
@@ -116,7 +116,14 @@ for (const [name, platform] of Object.entries(PLATFORMS)) {
     assert.match(body, /Say so in one line/);
     // The flow and its phases.
     for (const step of ["Gauge (never skipped)", "Plan: decompose into sub-questions", "issue independent searches in one turn", "one entity per file", "Challenge (Jadal)", "Next questions: what would falsify the hypothesis"]) assert.ok(body.includes(step), `research flow step missing: ${step}`);
-    for (const ph of RESEARCH_PHASES) assert.ok(body.includes("`phase` to `" + ph + "`") || ph === "research" || ph === "challenge", `research flow does not emit phase ${ph}`);
+    for (const ph of RESEARCH_PHASES) assert.ok(body.includes("`phase` to `" + ph + "`"), `research flow does not emit phase ${ph}`);
+    // The research step fans the plan out to researcher subagents (#7), sub-questions as angles.
+    const researchStep = body.split("\n").find((l) => l.startsWith("**Research** (`phase` to `research`)")) || "";
+    assert.match(researchStep, /Phase 3b/, "the research step must use the learning-research Phase 3b fan-out");
+    assert.match(researchStep, /`learning-researcher`/, "the research step must launch learning-researcher subagents");
+    assert.match(researchStep, /ONE message/, "the researchers are launched in one message");
+    for (const angle of ["company-facts", "funding", "competitor-product", "customer-sentiment", "market-size", "primary-documents", "customers", "disagreements"]) assert.ok(researchStep.includes("`" + angle + "`"), `the research step must name the market-research angle ${angle}`);
+    assert.match(body, /\*\*Merge\*\* \(`phase` to `merge`\)[^\n]*Never cite a fragment/, "the merge step must forbid citing a fragment");
     // Venture context and the latest brief are read; memory is written back.
     assert.match(body, /Venture context/);
     assert.match(body, /latest brief-\*\.md|read the latest one/);

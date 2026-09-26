@@ -41,7 +41,9 @@ Three cooperating parts plus a slash command:
 - **`research` (slash command, Claude Code only)** — forks the same agent in
   **research mode**: gauge (hypothesis + evidence, never skipped) → read
   venture context and the existing KB → plan sub-questions against the
-  routing table → research → store one entity per file → brief → challenge
+  routing table → gate → fan the sub-questions out to `learning-researcher`
+  subagents (one per sub-question, as the angles) → merge → store one entity
+  per file → brief → challenge
   (Jadal) → next questions. The brief is sent to the user and written to
   `<kb-root>/<topic-slug>/brief-<YYYY-MM-DD>.md`. The mode is defined in the
   agent prompt ("Research Mode" section); the agent also enters it from a
