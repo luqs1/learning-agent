@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { PLATFORMS, PLATFORM_ONLY, SHARED_SKILLS, CLAUDE_COMMANDS, ROOT, read } from "../lib/repo.mjs";
+import { PLATFORMS, PLATFORM_ONLY, SHARED_SKILLS, CLAUDE_COMMANDS, read, runOpencodePlugin } from "../lib/repo.mjs";
 import { parseFrontmatter } from "../lib/frontmatter.mjs";
 
 for (const [name, platform] of Object.entries(PLATFORMS)) {
@@ -74,20 +74,31 @@ test("claude: the research command enters research mode and puts the gauging que
 });
 
 test("opencode: the plugin registers the researcher agent and the /research command from the same prompt file", async () => {
-  const mod = await import("../../.opencode/plugins/learning-agent.js");
-  const config = {};
-  const plugin = await mod.LearningAgentPlugin({ client: null, directory: ROOT });
-  await plugin.config(config);
-  assert.ok(config.agent.learning, "learning agent registered");
-  assert.ok(config.agent.researcher, "researcher agent registered");
-  assert.equal(config.agent.researcher.mode, "primary");
-  assert.match(config.agent.researcher.color, /^#[0-9A-Fa-f]{6}$/);
-  assert.ok(config.agent.researcher.prompt.endsWith(config.agent.learning.prompt), "the researcher prompt must be the learning prompt plus a preamble");
-  assert.match(config.agent.researcher.prompt, /^# Mode\n/, "the preamble is a mode line, not a second rule set");
-  assert.match(config.agent.researcher.prompt, /gauging question/);
-  assert.ok(config.command.research, "/research command registered");
-  assert.equal(config.command.research.agent, "researcher");
-  assert.match(config.command.research.template, /\$ARGUMENTS/);
-  assert.match(config.command.research.template, /research mode/i);
-  assert.ok(config.skills.paths.some((p) => p.endsWith(path.join("opencode", "skills"))));
+  const { skills, agents, commands, switched, prompts } = await runOpencodePlugin();
+
+  assert.ok(skills.some((s) => s.id === "learning-assessment"), "learning-assessment skill registered");
+  assert.ok(skills.some((s) => s.id === "learning-research"), "learning-research skill registered");
+  for (const skill of skills) assert.ok(skill.path.endsWith(path.join(skill.id, "SKILL.md")), `${skill.id} path must point at its SKILL.md`);
+
+  const learning = agents.get("learning");
+  assert.ok(learning, "learning agent registered");
+  const researcher = agents.get("researcher");
+  assert.ok(researcher, "researcher agent registered");
+  assert.equal(researcher.mode, "primary");
+  assert.match(researcher.color, /^#[0-9A-Fa-f]{6}$/);
+  assert.ok(researcher.system.endsWith(learning.system), "the researcher prompt must be the learning prompt plus a preamble");
+  assert.match(researcher.system, /^# Mode\n/, "the preamble is a mode line, not a second rule set");
+  assert.match(researcher.system, /gauging question/);
+
+  const research = commands.find((c) => c.name === "research");
+  assert.ok(research, "/research command registered");
+  assert.equal(typeof research.execute, "function", "/research must execute, not rely on a V1 agent field");
+  await research.execute({ sessionID: "ses_test", prompt: { text: "the question" }, delivery: "steer" });
+  assert.deepEqual(switched, [{ sessionID: "ses_test", agent: "researcher" }], "/research must switch to the researcher agent");
+  assert.equal(prompts.length, 1, "/research must submit one prompt");
+  assert.equal(prompts[0].sessionID, "ses_test");
+  assert.match(prompts[0].text, /^Enter research mode for this question: the question$/m);
+  assert.doesNotMatch(prompts[0].text, /\$ARGUMENTS/, "the command must substitute the user's arguments");
+  assert.match(prompts[0].text, /writing the brief to the topic folder/);
+  assert.match(prompts[0].text, /research mode/i);
 });

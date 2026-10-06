@@ -23,7 +23,8 @@ and a working login or `ANTHROPIC_API_KEY`.
   loader cannot parse nested YAML); the Claude agent lists exactly the two
   shared skills; the `learn` and `research` commands fork into
   `agent: learning`; the opencode plugin registers the `researcher` agent
-  (the learning prompt plus a mode preamble) and the `/research` command.
+  (the learning prompt plus a mode preamble) and the `/research` command
+  through the OpenCode V2 plugin API.
 - **Parity** - the `claude/` and `opencode/` trees are identical after
   normalising the knowledge-base path and the bundled-script prefix. Only
   these differences are allowed: the KB path, the agent frontmatter keys
@@ -50,7 +51,8 @@ and a working login or `ANTHROPIC_API_KEY`.
   Exa/context7 MCP patterns, `skills` preloading `learning-research`;
   opencode: flat `mode: subagent`), the prompt is a one-angle worker that
   writes `.research/` fragments and never launches subagents, the opencode
-  plugin registers it with `permission.task: deny`, the research skill
+  plugin registers it with a V2 `subagent: deny` permission rule, the research
+  skill
   launches it by both platform identifiers, and `fanout.sh` exists, is
   executable, `--help` exits 0, runs commands concurrently, prints one JSON
   object per command in input order, reports exit codes (124 timeout, 127

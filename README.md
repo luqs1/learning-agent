@@ -130,10 +130,10 @@ In Claude Code the built-in `WebSearch` / `WebFetch` tools and, if you have the 
 
 ### opencode
 
-**Prerequisites:** [opencode](https://opencode.ai) installed and configured.
+**Prerequisites:** [opencode](https://opencode.ai) V2 installed and configured.
 
 ```bash
-opencode plugin learning-agent@git+https://github.com/luqs1/learning-agent.git -g
+opencode plugin add learning-agent@git+https://github.com/luqs1/learning-agent.git
 ```
 
 This installs the plugin globally and registers the learning agent and its sub-skills automatically. Restart opencode after installing.
@@ -193,7 +193,7 @@ timeline. Traces exist so prompt changes can be tested; see
 
 **opencode:**
 
-Remove the plugin line from `~/.config/opencode/opencode.json` and restart opencode.
+Remove the plugin with `opencode plugin remove learning-agent` (or delete its line from `~/.config/opencode/opencode.json`) and restart opencode.
 
 **Claude Code:**
 

@@ -78,6 +78,70 @@ export const PROMPT_FILES = [
   ...PLATFORM_ONLY.claude.filter((f) => f.endsWith(".md")),
 ];
 
+// Run the opencode V2 plugin's setup against a minimal fake context and return
+// what it registered. The real context (ctx.skill, ctx.agent, ctx.command,
+// ctx.session) is provided by opencode at runtime; for lint we only need the
+// parts the plugin touches. opencode's editor methods (`add`, `update`) are
+// captured here; the draft objects mirror the fields the plugin sets.
+export async function runOpencodePlugin() {
+  const mod = await import(path.join(ROOT, OPENCODE_PLUGIN));
+  const plugin = mod.default;
+
+  const skills = [];
+  const agents = new Map();
+  const commands = [];
+  const switched = [];
+  const prompts = [];
+
+  const ctx = {
+    options: {},
+    skill: {
+      async transform(cb) {
+        cb({ add: (s) => skills.push(s), list: () => [], get: () => undefined, update: () => {}, remove: () => {} });
+      },
+    },
+    agent: {
+      async transform(cb) {
+        cb({
+          list: () => [...agents.values()],
+          get: (id) => agents.get(id),
+          default: () => {},
+          remove: () => {},
+          update: (id, fn) => {
+            const agent =
+              agents.get(id) ?? {
+                id,
+                name: id,
+                request: { settings: {}, headers: {}, body: {} },
+                mode: "primary",
+                hidden: false,
+                permissions: [{ action: "*", resource: "*", effect: "allow" }],
+              };
+            fn(agent);
+            agents.set(id, agent);
+          },
+        });
+      },
+    },
+    command: {
+      async transform(cb) {
+        cb({ add: (c) => commands.push(c) });
+      },
+    },
+    session: {
+      async switchAgent(input) {
+        switched.push(input);
+      },
+      async prompt(input) {
+        prompts.push(input);
+      },
+    },
+  };
+
+  await plugin.setup(ctx);
+  return { plugin, skills, agents, commands, switched, prompts };
+}
+
 export function read(rel) {
   return fs.readFileSync(path.join(ROOT, rel), "utf8");
 }

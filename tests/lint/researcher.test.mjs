@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { ROOT, PLATFORMS, RESEARCHER_AGENT, OPENCODE_PLUGIN, RESEARCH_SCRIPTS_DIR, SKILL_SCRIPTS_PREFIX, read, exists } from "../lib/repo.mjs";
+import { ROOT, PLATFORMS, RESEARCHER_AGENT, RESEARCH_SCRIPTS_DIR, SKILL_SCRIPTS_PREFIX, read, exists, runOpencodePlugin } from "../lib/repo.mjs";
 import { parseFrontmatter } from "../lib/frontmatter.mjs";
 
 const REQUIRED_TOOLS = ["Bash", "Read", "Write", "WebSearch", "WebFetch"];
@@ -59,23 +59,25 @@ test("claude: the researcher restricts its tools and preloads the research skill
   assert.deepEqual(fm.frontmatter.skills, ["learning-research"], "the routing table must be preloaded");
 });
 
-test("opencode: the researcher is a flat-frontmatter subagent and the plugin registers it with task denied", async () => {
+test("opencode: the researcher is a flat-frontmatter subagent and the plugin registers it with subagent denied", async () => {
   const fm = parseFrontmatter(read(PLATFORMS.opencode.subagent));
   assert.deepEqual(fm.listKeys, [], "opencode frontmatter must be flat (the plugin loader only reads key: value)");
   assert.equal(fm.frontmatter.mode, "subagent");
   assert.match(fm.frontmatter.color, /^#[0-9A-Fa-f]{6}$/);
-  const { LearningAgentPlugin } = await import(path.join(ROOT, OPENCODE_PLUGIN));
-  const hooks = await LearningAgentPlugin({ client: null, directory: ROOT });
-  const config = {};
-  await hooks.config(config);
-  assert.equal(config.agent.learning.mode, "primary");
-  const researcher = config.agent[RESEARCHER_AGENT];
+  const { plugin, agents } = await runOpencodePlugin();
+  assert.equal(plugin.id, "learning-agent");
+  const learning = agents.get("learning");
+  assert.ok(learning, "plugin does not register agent learning");
+  assert.equal(learning.mode, "primary");
+  const researcher = agents.get(RESEARCHER_AGENT);
   assert.ok(researcher, `plugin does not register agent ${RESEARCHER_AGENT}`);
   assert.equal(researcher.mode, "subagent");
-  assert.equal(researcher.permission?.task, "deny", "a researcher must not be able to launch researchers");
-  assert.equal(researcher.prompt, fm.body.trim());
+  assert.ok(
+    researcher.permissions.some((rule) => rule.action === "subagent" && rule.effect === "deny"),
+    "a researcher must not be able to launch researchers",
+  );
+  assert.equal(researcher.system, fm.body.trim());
   assert.equal(researcher.description, fm.frontmatter.description);
-  assert.ok(config.skills.paths.some((p) => p.endsWith(path.join("opencode", "skills"))));
 });
 
 test("the research skill launches the researcher by its platform identifiers and the agent prompt knows about the merge", () => {

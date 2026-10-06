@@ -88,7 +88,7 @@ same gate and fan-out, then a cited brief instead of a lesson).
 │               └── fetch-readable.sh                                          # URL → readable text
 │
 ├── .opencode/
-│   └── plugins/learning-agent.js     # registers the opencode agents (learning, learning-researcher, researcher), the /research command + skills
+│   └── plugins/learning-agent.js     # OpenCode V2 plugin: registers the opencode agents (learning, learning-researcher, researcher), the /research command + skills
 ├── opencode/                         # ── OPENCODE plugin assets ──
 │   ├── agents/
 │   │   ├── learning.md               # agent prompt (opencode flavour)
@@ -130,8 +130,9 @@ other. The **only intended differences** between the copies are:
      and context7 MCP patterns — no Agent, no Edit) and `skills:` preloading
      `learning-research`; opencode researcher: `description`,
      `mode: subagent`, `color`, with the tool restriction applied by the
-     plugin JS (`permission: { task: "deny" }`) and the skill loaded through
-     opencode's `skill` tool (the prompt says so).
+     plugin JS (V2 `permissions: [{ action: "subagent", resource: "*",
+     effect: "deny" }]`) and the skill loaded through opencode's `skill` tool
+     (the prompt says so).
    - Claude skills carry `user-invocable: false` (and `learning-research` also
      `allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/*)` so its scripts run
      without permission prompts); opencode skills carry neither, because
@@ -165,10 +166,11 @@ other. The **only intended differences** between the copies are:
    - opencode → no command file. `.opencode/plugins/learning-agent.js`
      registers a second primary agent, **`researcher`**, whose prompt is the
      learning prompt (`opencode/agents/learning.md`) with a short `# Mode`
-     preamble prepended, plus a **`/research`** command (`config.command`)
-     that runs on it with the same template text as the Claude skill. Chosen
-     over a `research:` prefix because opencode's config hook accepts
-     `agent` and `command` maps directly, so users get Tab-selectable
+     preamble prepended, plus a **`/research`** command
+     (`ctx.command.transform`) that switches the session to `researcher` and
+     submits the same template text as the Claude skill. Chosen over a
+     `research:` prefix because the plugin can register the agent and command
+     directly, so users get Tab-selectable
      `researcher` and `/research <question>` with nothing to remember. The
      rules of the mode live only in the prompt file; the preamble and the
      command template are mode lines, and the lint checks the researcher
@@ -217,8 +219,10 @@ How each platform lets `SKILL.md` refer to those scripts:
   tool returns the body followed by `Base directory for this skill: <path>` and
   the note that relative paths such as `scripts/` resolve against it, plus a
   sampled file list. The opencode copy therefore uses plain `scripts/<name>.sh`
-  paths. opencode discovers the skill through `config.skills.paths`, which
-  `.opencode/plugins/learning-agent.js` points at `opencode/skills/`.
+  paths. opencode discovers the skill because
+  `.opencode/plugins/learning-agent.js` adds each
+  `opencode/skills/<name>/SKILL.md` through `ctx.skill.transform` on plugin
+  setup.
 
 Script conventions (enforce them in any new script):
 
@@ -342,7 +346,8 @@ Full details in [tests/README.md](./tests/README.md). The short version:
 
 ## Install / distribution (reference)
 
-- **opencode:** `opencode plugin learning-agent@git+https://github.com/luqs1/learning-agent.git -g`
+- **opencode:** `opencode plugin add learning-agent@git+https://github.com/luqs1/learning-agent.git`
+  (requires OpenCode V2; the plugin uses the V2 plugin API)
 - **Claude Code:** `/plugin marketplace add luqs1/learning-agent` then
   `/plugin install learning-agent@learning-agent`
 
