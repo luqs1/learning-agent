@@ -52,8 +52,8 @@ export const PLATFORM_ONLY = {
   opencode: [],
 };
 
-// The user-invocable slash commands under claude/skills/, each forking into
-// the learning agent: [name, file].
+// The user-invocable slash commands under claude/skills/, each running the
+// learning agent (research always forks; learn picks inline or fork): [name, file].
 export const CLAUDE_COMMANDS = [
   ["learn", "claude/skills/learn/SKILL.md"],
   ["research", "claude/skills/research/SKILL.md"],

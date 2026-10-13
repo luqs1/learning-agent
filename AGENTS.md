@@ -36,8 +36,13 @@ Three cooperating parts plus a slash command:
   normalised URL, highest tier wins, disagreements between angles go to
   *Contested*. `scripts/fanout.sh` runs several helper scripts concurrently
   with per-host staggering for the rate-limited providers.
-- **`learn` (slash command, Claude Code only)** — forks a learning session on a
-  given topic.
+- **`learn` (slash command, Claude Code only)** — starts a learning session on
+  a given topic. No `context: fork`: the skill body decides at run time. As
+  the first thing in a conversation it runs **inline** (reads
+  `claude/agents/learning.md` as its prompt and loads the two shared skills),
+  so the session is a live conversation. Typed mid-work, it **forks** the
+  `learning-agent:learning` subagent with a brief of the work, relays its
+  questions verbatim and sends answers back with SendMessage.
 - **`research` (slash command, Claude Code only)** — forks the same agent in
   **research mode**: gauge (hypothesis + evidence, never skipped) → read
   venture context and the existing KB → plan sub-questions against the

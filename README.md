@@ -174,9 +174,9 @@ You can add a shell alias to make this shorter:
 alias learn='claude --agent learning-agent:learning'
 ```
 
-**Quick fork via slash command:**
+**Via slash command:**
 
-Inside any Claude Code session, type `/learn <topic>`. This spins up the learning agent in a temporary forked context — good for "quick, teach me this thing" moments without leaving what you're doing. `/research <question>` does the same in research mode (see [Use it for research](#use-it-for-research)).
+Inside any Claude Code session, type `/learn <topic>`. As the first message of a session it runs inline, so you talk to the learning agent directly. Typed in the middle of other work, it forks the learning agent alongside that work, so you can learn something without losing your place. `/research <question>` does the same in research mode (see [Use it for research](#use-it-for-research)).
 
 Knowledge base is stored at `~/.claude/learning/<topic-slug>/`.
 

@@ -49,13 +49,23 @@ test("both trees: shared skills are user-invocable: false", () => {
 });
 
 for (const [name, file] of CLAUDE_COMMANDS) {
-  test(`claude: ${name} slash command forks into the learning agent`, () => {
+  test(`claude: ${name} slash command runs the learning agent`, () => {
     assert.ok(PLATFORM_ONLY.claude.includes(file), `${file} must be listed as Claude-only`);
     const fm = parseFrontmatter(read(file));
     assert.ok(fm.ok, fm.errors?.join("; "));
     assert.equal(fm.frontmatter.name, name);
-    assert.equal(fm.frontmatter.context, "fork");
-    assert.equal(fm.frontmatter.agent, "learning");
+    if (name === "learn") {
+      // /learn chooses at run time: inline when it starts the conversation,
+      // a forked learning agent when the user is mid-work. A static
+      // `context: fork` would always background it.
+      assert.equal(fm.frontmatter.context, undefined, "learn must not fork unconditionally");
+      assert.match(fm.body, /\$\{CLAUDE_SKILL_DIR\}\/\.\.\/\.\.\/agents\/learning\.md/);
+      assert.match(fm.body, /subagent_type: "learning-agent:learning"/);
+      assert.match(fm.body, /When it is unclear, choose inline/);
+    } else {
+      assert.equal(fm.frontmatter.context, "fork");
+      assert.equal(fm.frontmatter.agent, "learning");
+    }
     assert.ok(fm.frontmatter["argument-hint"], `${name} needs an argument-hint`);
     assert.notEqual(fm.frontmatter["user-invocable"], "false", `${name} is a user-invocable slash command`);
     assert.match(fm.body, /\$ARGUMENTS/);
